@@ -14,7 +14,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
     /// <summary>
     /// A connection adapter that allows enabling and resetting of an SSL/TLS connection.
     /// </summary>
-    internal class SecureConnectionAdapter : IFtpSecureConnectionAdapter
+    internal class SecureConnectionAdapterManager : IFtpSecureConnectionAdapterManager
     {
         private readonly IDuplexPipe _socketPipe;
         private readonly IDuplexPipe _connectionPipe;
@@ -24,13 +24,13 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         private IFtpConnectionAdapter _activeCommunicationService;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SecureConnectionAdapter"/> class.
+        /// Initializes a new instance of the <see cref="SecureConnectionAdapterManager"/> class.
         /// </summary>
         /// <param name="socketPipe">The pipe from the socket.</param>
         /// <param name="connectionPipe">The pipe to the connection object.</param>
         /// <param name="sslStreamWrapperFactory">The SSL stream wrapper factory.</param>
         /// <param name="connectionClosed">The cancellation token for a closed connection.</param>
-        public SecureConnectionAdapter(
+        public SecureConnectionAdapterManager(
             IDuplexPipe socketPipe,
             IDuplexPipe connectionPipe,
             ISslStreamWrapperFactory sslStreamWrapperFactory,
@@ -47,10 +47,31 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         }
 
         /// <inheritdoc />
-        public IFtpService Sender => _activeCommunicationService.Sender;
+        public FtpServiceStatus Status => _activeCommunicationService.Status;
 
         /// <inheritdoc />
-        public IPausableFtpService Receiver => _activeCommunicationService.Receiver;
+        public Task PauseAsync(CancellationToken cancellationToken)
+        {
+            return _activeCommunicationService.PauseAsync(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public Task ContinueAsync(CancellationToken cancellationToken)
+        {
+            return _activeCommunicationService.ContinueAsync(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            return _activeCommunicationService.StartAsync(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            return _activeCommunicationService.StopAsync(cancellationToken);
+        }
 
         /// <inheritdoc />
         public async Task ResetAsync(CancellationToken cancellationToken)
@@ -66,44 +87,40 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         }
 
         /// <inheritdoc />
-        public async Task EnableSslStreamAsync(X509Certificate2 certificate, CancellationToken cancellationToken)
+        public async Task ActivateAsync(IFtpConnectionAdapter connectionAdapter, CancellationToken cancellationToken)
         {
             await StopAsync(cancellationToken)
                .ConfigureAwait(false);
             try
             {
-                _activeCommunicationService = new SslStreamConnectionAdapter(
-                    _socketPipe,
-                    _connectionPipe,
-                    _sslStreamWrapperFactory,
-                    certificate,
-                    _connectionClosed);
+                // Try to activate the new connection adapter
+                _activeCommunicationService = connectionAdapter;
+                await StartAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
             {
+                // Use the default (non-encrypting) connection adapter if activation failed
                 _activeCommunicationService = new PassThroughConnectionAdapter(
                     _socketPipe,
                     _connectionPipe,
                     _connectionClosed);
-                throw;
-            }
-            finally
-            {
                 await StartAsync(cancellationToken)
                    .ConfigureAwait(false);
+                throw;
             }
         }
 
         /// <inheritdoc />
-        public Task StartAsync(CancellationToken cancellationToken)
+        public Task EnableSslStreamAsync(X509Certificate2 certificate, CancellationToken cancellationToken)
         {
-            return _activeCommunicationService.StartAsync(cancellationToken);
-        }
-
-        /// <inheritdoc />
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            return _activeCommunicationService.StopAsync(cancellationToken);
+            return ActivateAsync(
+                new SslStreamConnectionAdapter(
+                    _socketPipe,
+                    _connectionPipe,
+                    _sslStreamWrapperFactory,
+                    certificate,
+                    _connectionClosed),
+                cancellationToken);
         }
     }
 }

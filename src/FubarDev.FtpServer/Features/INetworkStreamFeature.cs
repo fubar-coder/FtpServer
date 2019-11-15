@@ -21,7 +21,7 @@ namespace FubarDev.FtpServer.Features
         /// <summary>
         /// Gets the connection adapter that encrypts the network stream with an <c>SslStream</c> or something similar.
         /// </summary>
-        IFtpSecureConnectionAdapter SecureConnectionAdapter { get; }
+        IFtpSecureConnectionAdapterManager SecureConnectionAdapterManager { get; }
 
         /// <summary>
         /// Gets the pipe writer for sending the responses.

@@ -200,7 +200,7 @@ namespace FubarDev.FtpServer
             var transportFeature = new FtpConnectionTransportFeature(transport);
 
             _networkStreamFeature = new NetworkStreamFeature(
-                new SecureConnectionAdapter(
+                new SecureConnectionAdapterManager(
                     socketPipe,
                     connectionPipe,
                     sslStreamWrapperFactory,
@@ -214,8 +214,10 @@ namespace FubarDev.FtpServer
             parentFeatures.Set<ISecureConnectionFeature>(secureConnectionFeature);
             parentFeatures.Set<IServerCommandFeature>(new ServerCommandFeature(_serverCommandChannel));
             parentFeatures.Set<INetworkStreamFeature>(_networkStreamFeature);
+
             parentFeatures.Set<IFtpConnectionEventHost>(this);
             parentFeatures.Set<IFtpConnectionStatusCheck>(_idleCheck);
+            
             parentFeatures.Set<IConnectionIdFeature>(new FtpConnectionIdFeature(ConnectionId));
             parentFeatures.Set<IConnectionLifetimeFeature>(new FtpConnectionLifetimeFeature(this));
             parentFeatures.Set<IConnectionTransportFeature>(transportFeature);
@@ -292,7 +294,7 @@ namespace FubarDev.FtpServer
                    .ConfigureAwait(false);
                 await _streamReaderService.StartAsync(CancellationToken.None)
                    .ConfigureAwait(false);
-                await _networkStreamFeature.SecureConnectionAdapter.StartAsync(CancellationToken.None)
+                await _networkStreamFeature.SecureConnectionAdapterManager.StartAsync(CancellationToken.None)
                    .ConfigureAwait(false);
 
                 _commandChannelReader = CommandChannelDispatcherAsync(
@@ -347,7 +349,7 @@ namespace FubarDev.FtpServer
                             await _serverCommandHandler.ConfigureAwait(false);
                         }
 
-                        await _networkStreamFeature.SecureConnectionAdapter.StopAsync(CancellationToken.None)
+                        await _networkStreamFeature.SecureConnectionAdapterManager.StopAsync(CancellationToken.None)
                            .ConfigureAwait(false);
                         await _streamReaderService.StopAsync(CancellationToken.None)
                            .ConfigureAwait(false);

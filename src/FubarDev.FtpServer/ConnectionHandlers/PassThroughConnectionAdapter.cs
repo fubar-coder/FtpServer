@@ -47,10 +47,19 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         }
 
         /// <inheritdoc />
-        public IFtpService Sender => _transmitService;
+        public FtpServiceStatus Status => _receiverService.Status;
 
         /// <inheritdoc />
-        public IPausableFtpService Receiver => _receiverService;
+        public Task PauseAsync(CancellationToken cancellationToken)
+        {
+            return _receiverService.PauseAsync(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public Task ContinueAsync(CancellationToken cancellationToken)
+        {
+            return _receiverService.ContinueAsync(cancellationToken);
+        }
 
         /// <inheritdoc />
         public Task StartAsync(CancellationToken cancellationToken)

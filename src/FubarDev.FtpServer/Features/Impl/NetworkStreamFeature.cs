@@ -17,15 +17,15 @@ namespace FubarDev.FtpServer.Features.Impl
         private readonly IConnectionTransportFeature _transportFeature;
 
         public NetworkStreamFeature(
-            IFtpSecureConnectionAdapter secureConnectionAdapter,
+            IFtpSecureConnectionAdapterManager secureConnectionAdapterManager,
             IConnectionTransportFeature transportFeature)
         {
             _transportFeature = transportFeature;
-            SecureConnectionAdapter = secureConnectionAdapter;
+            SecureConnectionAdapterManager = secureConnectionAdapterManager;
         }
 
         /// <inheritdoc />
-        public IFtpSecureConnectionAdapter SecureConnectionAdapter { get; }
+        public IFtpSecureConnectionAdapterManager SecureConnectionAdapterManager { get; }
 
         /// <inheritdoc />
         public PipeWriter Output => _transportFeature.Transport.Output;
@@ -33,7 +33,7 @@ namespace FubarDev.FtpServer.Features.Impl
         /// <inheritdoc />
         public Task ResetAsync(CancellationToken cancellationToken)
         {
-            return SecureConnectionAdapter.ResetAsync(cancellationToken);
+            return SecureConnectionAdapterManager.ResetAsync(cancellationToken);
         }
     }
 }

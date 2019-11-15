@@ -45,14 +45,23 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         }
 
         /// <inheritdoc />
-        public IFtpService Sender
-            => _info?.TransmitterService
-                ?? throw new InvalidOperationException("Sender can only be accessed when the connection service was started.");
+        public FtpServiceStatus Status => Receiver.Status;
+
+        private IPausableFtpService Receiver
+            => _info?.ReceiverService
+               ?? throw new InvalidOperationException("Receiver can only be accessed when the connection service was started.");
 
         /// <inheritdoc />
-        public IPausableFtpService Receiver
-            => _info?.ReceiverService
-                ?? throw new InvalidOperationException("Receiver can only be accessed when the connection service was started.");
+        public Task PauseAsync(CancellationToken cancellationToken)
+        {
+            return Receiver.PauseAsync(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public Task ContinueAsync(CancellationToken cancellationToken)
+        {
+            return Receiver.ContinueAsync(cancellationToken);
+        }
 
         /// <inheritdoc />
         public async Task StartAsync(CancellationToken cancellationToken)

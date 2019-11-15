@@ -87,7 +87,7 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
             CancellationToken cancellationToken)
         {
             var networkStreamFeature = connection.Features.Get<INetworkStreamFeature>();
-            var service = networkStreamFeature.SecureConnectionAdapter;
+            var service = networkStreamFeature.SecureConnectionAdapterManager;
 
             var secureConnectionFeature = connection.Features.Get<ISecureConnectionFeature>();
             logger?.LogTrace("Enable SslStream");
@@ -107,7 +107,7 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
             ISecureConnectionFeature secureConnectionFeature,
             CancellationToken cancellationToken)
         {
-            var service = networkStreamFeature.SecureConnectionAdapter;
+            var service = networkStreamFeature.SecureConnectionAdapterManager;
             await service.ResetAsync(cancellationToken).ConfigureAwait(false);
 
             secureConnectionFeature.CreateEncryptedStream = Task.FromResult;

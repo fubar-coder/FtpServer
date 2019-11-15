@@ -40,7 +40,7 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
             var connection = _connectionAccessor.FtpConnection;
             var networkStreamFeature = connection.Features.Get<INetworkStreamFeature>();
 
-            await networkStreamFeature.SecureConnectionAdapter.Receiver.ContinueAsync(cancellationToken)
+            await networkStreamFeature.SecureConnectionAdapterManager.ContinueAsync(cancellationToken)
                .ConfigureAwait(false);
             _logger?.LogDebug("Receiver resumed");
         }

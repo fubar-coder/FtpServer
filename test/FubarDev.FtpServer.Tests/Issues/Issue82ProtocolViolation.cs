@@ -26,8 +26,8 @@ namespace FubarDev.FtpServer.Tests.Issues
         [Fact]
         public async Task TestParallelRequests()
         {
-            var step = 50;
-            for (var i = 0; i != 5000; i += step)
+            var step = 400;
+            for (var i = 0; i != 4000; i += step)
             {
                 await TestParallel(step, i).ConfigureAwait(false);
             }

@@ -12,7 +12,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
     /// <summary>
     /// Connection adapter for a secure connection.
     /// </summary>
-    public interface IFtpSecureConnectionAdapter : IFtpConnectionAdapter
+    public interface IFtpSecureConnectionAdapterManager : IPausableFtpService
     {
         /// <summary>
         /// Resets the connection to non-encrypted communication.
@@ -20,6 +20,14 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
         Task ResetAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Activates the given connection adapter.
+        /// </summary>
+        /// <param name="connectionAdapter">The connection adapter to activate.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The task.</returns>
+        Task ActivateAsync(IFtpConnectionAdapter connectionAdapter, CancellationToken cancellationToken);
 
         /// <summary>
         /// Enables encryption with an <see cref="SslStream"/>.
