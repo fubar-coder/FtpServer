@@ -146,8 +146,7 @@ namespace TestFtpServer
         {
             var ftpConnection = ((FtpServer)_ftpServer)
                .GetConnections()
-               .Cast<FtpConnection>()
-               .SingleOrDefault(x => string.Equals(connectionId, x.ConnectionId, StringComparison.OrdinalIgnoreCase));
+               .SingleOrDefault(x => IsConnectionWithId(x, connectionId));
             if (ftpConnection == null)
             {
                 return;
@@ -175,6 +174,12 @@ namespace TestFtpServer
         {
             _applicationLifetime.StopApplication();
             return Task.CompletedTask;
+        }
+
+        private bool IsConnectionWithId(IFtpConnection connection, string connectionId)
+        {
+            var connIdFeature = connection.Features.Get<IConnectionIdFeature>();
+            return string.Equals(connIdFeature.ConnectionId, connectionId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

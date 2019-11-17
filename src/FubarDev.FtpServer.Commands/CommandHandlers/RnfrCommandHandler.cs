@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Commands;
 using FubarDev.FtpServer.Features;
+using FubarDev.FtpServer.Features.Impl;
 using FubarDev.FtpServer.FileSystem;
 
 namespace FubarDev.FtpServer.CommandHandlers
@@ -37,29 +38,11 @@ namespace FubarDev.FtpServer.CommandHandlers
                 return new FtpResponse(550, T("Source entry doesn't exist."));
             }
 
-            var renameFeature = new RenameFeature(fileInfo);
+            var renameFeature = new RenameCommandFeature(fileInfo);
             Connection.Features.Set<IRenameCommandFeature?>(renameFeature);
 
             var fullName = tempPath.GetFullPath(fileInfo.FileName);
             return new FtpResponse(350, T("Rename started ({0}).", fullName));
-        }
-
-        private class RenameFeature : IRenameCommandFeature, IResettableFeature
-        {
-            public RenameFeature(SearchResult<IUnixFileSystemEntry> renameFrom)
-            {
-                RenameFrom = renameFrom;
-            }
-
-            /// <inheritdoc />
-            public SearchResult<IUnixFileSystemEntry>? RenameFrom { get; set; }
-
-            /// <inheritdoc />
-            public Task ResetAsync(CancellationToken cancellationToken)
-            {
-                RenameFrom = null;
-                return Task.CompletedTask;
-            }
         }
     }
 }

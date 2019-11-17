@@ -2,7 +2,6 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
-using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,8 +9,6 @@ using System.Threading.Tasks;
 using FubarDev.FtpServer.Commands;
 using FubarDev.FtpServer.DataConnection;
 using FubarDev.FtpServer.Features;
-using FubarDev.FtpServer.Features.Impl;
-using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.Localization;
 
 using Microsoft.AspNetCore.Connections.Features;
@@ -58,41 +55,7 @@ namespace FubarDev.FtpServer.CommandHandlers
             _loginStateMachine.Reset();
 
             // Reinitialize or dispose and remove disposable features
-            foreach (var featureItem in Connection.Features)
-            {
-                bool remove = false;
-                try
-                {
-                    switch (featureItem.Value)
-                    {
-                        case IFtpConnection _:
-                            // Never dispose the connection itself.
-                            break;
-                        case IResettableFeature f:
-                            await f.ResetAsync(cancellationToken).ConfigureAwait(false);
-                            break;
-                        case IFtpDataConnectionFeature f:
-                            remove = true;
-                            await f.DisposeAsync().ConfigureAwait(false);
-                            break;
-                        case IDisposable disposable:
-                            remove = true;
-                            disposable.Dispose();
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Ignore exceptions
-                    _logger?.LogWarning(ex, "Failed to dispose feature of type {featureType}: {errorMessage}", featureItem.Key, ex.Message);
-                }
-
-                if (remove)
-                {
-                    // Remove from features collection
-                    Connection.Features[featureItem.Key] = null;
-                }
-            }
+            await Connection.Features.ResetAsync(cancellationToken, _logger).ConfigureAwait(false);
 
             // Reset the FTP data connection configuration feature
             Connection.Features.Set<IFtpDataConnectionConfigurationFeature?>(null);

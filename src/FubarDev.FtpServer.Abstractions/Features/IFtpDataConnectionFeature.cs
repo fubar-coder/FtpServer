@@ -12,7 +12,7 @@ namespace FubarDev.FtpServer.Features
     /// <summary>
     /// Feature for an FTP data connection.
     /// </summary>
-    public interface IFtpDataConnectionFeature
+    public interface IFtpDataConnectionFeature : IAsyncDisposable
     {
         /// <summary>
         /// Gets the FTP command that initiated the creation of the feature.
@@ -34,11 +34,5 @@ namespace FubarDev.FtpServer.Features
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
         Task<IFtpDataConnection> GetDataConnectionAsync(TimeSpan timeout, CancellationToken cancellationToken);
-
-        /// <summary>
-        /// Async disposing of the handler.
-        /// </summary>
-        /// <returns>The task.</returns>
-        Task DisposeAsync();
     }
 }

@@ -1,4 +1,4 @@
-// <copyright file="IFtpSecureConnectionAdapter.cs" company="Fubar Development Junker">
+// <copyright file="IFtpSecureConnectionAdapterManager.cs" company="Fubar Development Junker">
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 

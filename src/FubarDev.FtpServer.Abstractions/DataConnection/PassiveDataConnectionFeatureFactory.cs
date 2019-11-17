@@ -74,7 +74,7 @@ namespace FubarDev.FtpServer.DataConnection
                 _logger);
         }
 
-        private class PassiveDataConnectionFeature : IFtpDataConnectionFeature
+        private class PassiveDataConnectionFeature : IFtpDataConnectionFeature, IAsyncDisposable
         {
             private readonly IPasvListener _listener;
             private readonly List<IFtpDataConnectionValidator> _validators;
@@ -155,7 +155,7 @@ namespace FubarDev.FtpServer.DataConnection
             }
 
             /// <inheritdoc />
-            public async Task DisposeAsync()
+            public async ValueTask DisposeAsync()
             {
                 if (_activeDataConnection != null)
                 {

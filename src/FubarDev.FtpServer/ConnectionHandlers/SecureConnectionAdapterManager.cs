@@ -1,4 +1,4 @@
-// <copyright file="SecureConnectionAdapter.cs" company="Fubar Development Junker">
+// <copyright file="SecureConnectionAdapterManager.cs" company="Fubar Development Junker">
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
@@ -19,7 +19,6 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         private readonly IDuplexPipe _socketPipe;
         private readonly IDuplexPipe _connectionPipe;
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
-
         private readonly CancellationToken _connectionClosed;
         private IFtpConnectionAdapter _activeCommunicationService;
 

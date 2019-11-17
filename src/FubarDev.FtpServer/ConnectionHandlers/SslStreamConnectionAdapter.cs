@@ -25,9 +25,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         private readonly IDuplexPipe _connectionPipe;
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
         private readonly X509Certificate2 _certificate;
-
         private readonly CancellationToken _connectionClosed;
-
         private SslCommunicationInfo? _info;
 
         public SslStreamConnectionAdapter(

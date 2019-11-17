@@ -21,10 +21,8 @@ using FubarDev.FtpServer.Authentication;
 using FubarDev.FtpServer.CommandHandlers;
 using FubarDev.FtpServer.Commands;
 using FubarDev.FtpServer.ConnectionChecks;
-using FubarDev.FtpServer.ConnectionHandlers;
 using FubarDev.FtpServer.DataConnection;
 using FubarDev.FtpServer.Features;
-using FubarDev.FtpServer.Features.Impl;
 using FubarDev.FtpServer.Localization;
 using FubarDev.FtpServer.Networking;
 using FubarDev.FtpServer.ServerCommands;
@@ -40,10 +38,8 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// This class represents a FTP connection.
     /// </summary>
-    public sealed class FtpConnection : FtpConnectionContext, IFtpConnection
+    public sealed class FtpConnection : IFtpConnection
     {
-        private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
-
         private readonly TcpClient _socket;
 
         private readonly IFtpConnectionAccessor _connectionAccessor;
@@ -54,13 +50,12 @@ namespace FubarDev.FtpServer
 
         private readonly IDisposable? _loggerScope;
 
-        private readonly Channel<IServerCommand> _serverCommandChannel;
+        private readonly Channel<IServerCommand> _serverCommandChannel =
+            Channel.CreateBounded<IServerCommand>(new BoundedChannelOptions(5));
 
         private readonly Pipe _socketCommandPipe = new Pipe();
 
         private readonly Pipe _socketResponsePipe = new Pipe();
-
-        private readonly NetworkStreamFeature _networkStreamFeature;
 
         private readonly Task _commandReader;
 
@@ -69,8 +64,6 @@ namespace FubarDev.FtpServer
         private readonly int? _dataPort;
 
         private readonly ILogger<FtpConnection>? _logger;
-
-        private readonly IPEndPoint _remoteEndPoint;
 
         /// <summary>
         /// This semaphore avoids the execution of `StopAsync` while a `StartAsync` is running.
@@ -98,9 +91,7 @@ namespace FubarDev.FtpServer
         /// </remarks>
         private readonly IFtpService _streamWriterService;
 
-        private readonly IdleCheck _idleCheck;
-
-        private readonly IServiceProvider _serviceProvider;
+        private readonly FtpConnectionContext _context;
 
         private bool _connectionClosing;
 
@@ -138,105 +129,59 @@ namespace FubarDev.FtpServer
             ILoggerFactory? loggerFactory = null)
         {
             var socket = socketAccessor.TcpSocketClient ?? throw new InvalidOperationException("The socket to communicate with the client was not set");
-#pragma warning disable 618
-            ConnectionServices =
-#pragma warning restore 618
-                _serviceProvider = serviceProvider;
+            var defaultEncoding = options.Value.DefaultEncoding ?? Encoding.ASCII;
+            var applicationInputPipe = new Pipe();
+            var applicationOutputPipe = new Pipe();
+            var socketPipe = new DuplexPipe(_socketCommandPipe.Reader, _socketResponsePipe.Writer);
+            var connectionPipe = new DuplexPipe(applicationOutputPipe.Reader, applicationInputPipe.Writer);
+            var transport = new DuplexPipe(applicationInputPipe.Reader, applicationOutputPipe.Writer);
+            var remoteEndPoint = (IPEndPoint)socket.Client.RemoteEndPoint;
 
-            ConnectionId = "FTP-" + Guid.NewGuid().ToString("N");
-
-            _dataPort = portOptions.Value.DataPort;
-            _idleCheck = new IdleCheck(this);
-            var remoteEndPoint = _remoteEndPoint = (IPEndPoint)socket.Client.RemoteEndPoint;
+            _context = new FtpConnectionContext(
+                catalogLoader,
+                defaultEncoding,
+                _serverCommandChannel.Writer,
+                socketPipe,
+                connectionPipe,
+                sslStreamWrapperFactory,
+                transport,
+                socket.Client.LocalEndPoint,
+                remoteEndPoint,
+                serviceProvider);
 
             var properties = new Dictionary<string, object?>
             {
                 ["RemoteAddress"] = remoteEndPoint.ToString(),
                 ["RemoteIp"] = remoteEndPoint.Address.ToString(),
                 ["RemotePort"] = remoteEndPoint.Port,
-                ["ConnectionId"] = ConnectionId,
+                ["ConnectionId"] = _context.ConnectionId,
             };
 
+            _socket = socket;
             _loggerScope = logger?.BeginScope(properties);
 
-            _socket = socket;
+            _dataPort = portOptions.Value.DataPort;
             _connectionAccessor = connectionAccessor;
             _serverCommandExecutor = serverCommandExecutor;
             _secureDataConnectionWrapper = secureDataConnectionWrapper;
-            _serverCommandChannel = Channel.CreateBounded<IServerCommand>(new BoundedChannelOptions(3));
 
             _logger = logger;
 
-            var parentFeatures = new FeatureCollection();
-            var connectionFeature = new ConnectionFeature(
-                (IPEndPoint)socket.Client.LocalEndPoint,
-                remoteEndPoint);
-            var secureConnectionFeature = new SecureConnectionFeature();
-
-            var applicationInputPipe = new Pipe();
-            var applicationOutputPipe = new Pipe();
-            var socketPipe = new DuplexPipe(_socketCommandPipe.Reader, _socketResponsePipe.Writer);
-            var connectionPipe = new DuplexPipe(applicationOutputPipe.Reader, applicationInputPipe.Writer);
-
-            var originalStream = socketAccessor.TcpSocketStream ?? socket.GetStream();
+            var originalStream = socketAccessor.TcpSocketStream ?? _socket.GetStream();
             _streamReaderService = new ConnectionClosingNetworkStreamReader(
                 originalStream,
                 _socketCommandPipe.Writer,
-                _cancellationTokenSource,
+                _context,
                 loggerFactory?.CreateLogger($"{nameof(StreamPipeWriterService)}:Socket:Receive"));
             _streamWriterService = new StreamPipeWriterService(
                 originalStream,
                 _socketResponsePipe.Reader,
-                _cancellationTokenSource.Token,
+                _context.ConnectionClosed,
                 loggerFactory?.CreateLogger($"{nameof(StreamPipeWriterService)}:Socket:Transmit"));
 
-            var transport = new DuplexPipe(applicationInputPipe.Reader, applicationOutputPipe.Writer);
-            var transportFeature = new FtpConnectionTransportFeature(transport);
-
-            _networkStreamFeature = new NetworkStreamFeature(
-                new SecureConnectionAdapterManager(
-                    socketPipe,
-                    connectionPipe,
-                    sslStreamWrapperFactory,
-                    _cancellationTokenSource.Token),
-                transportFeature);
-
-            var statisticsCollectorFeature = new FtpStatisticsCollectorFeature();
-
-#pragma warning disable 618
-            parentFeatures.Set<IConnectionFeature>(connectionFeature);
-#pragma warning restore 618
-            parentFeatures.Set<IConnectionEndPointFeature>(connectionFeature);
-            parentFeatures.Set<ISecureConnectionFeature>(secureConnectionFeature);
-            parentFeatures.Set<IServerCommandFeature>(new ServerCommandFeature(_serverCommandChannel));
-            parentFeatures.Set<INetworkStreamFeature>(_networkStreamFeature);
-            parentFeatures.Set<IFtpConnectionStatusCheck>(_idleCheck);
-            
-            parentFeatures.Set<IConnectionIdFeature>(new FtpConnectionIdFeature(ConnectionId));
-            parentFeatures.Set<IConnectionLifetimeFeature>(new FtpConnectionLifetimeFeature(this));
-            parentFeatures.Set<IConnectionTransportFeature>(transportFeature);
-            parentFeatures.Set<IServiceProvidersFeature>(new FtpServiceProviderFeature(serviceProvider));
-            parentFeatures.Set<IFtpStatisticsCollectorFeature>(statisticsCollectorFeature);
-
-            var defaultEncoding = options.Value.DefaultEncoding ?? Encoding.ASCII;
-            var authInfoFeature = new AuthorizationInformationFeature(statisticsCollectorFeature);
-
-            var features = new FeatureCollection(parentFeatures);
-            features.Set<ILocalizationFeature>(new LocalizationFeature(catalogLoader));
-            features.Set<IFileSystemFeature>(new FileSystemFeature());
-#pragma warning disable 618
-            features.Set<IAuthorizationInformationFeature>(authInfoFeature);
-#pragma warning restore 618
-            features.Set<IConnectionUserFeature>(authInfoFeature);
-            features.Set<IEncodingFeature>(new EncodingFeature(defaultEncoding));
-            features.Set<ITransferConfigurationFeature>(new TransferConfigurationFeature());
-
-            Features = features;
-
             _commandReader = ReadCommandsFromPipeline(
-                applicationInputPipe.Reader,
                 _ftpCommandChannel.Writer,
-                _cancellationTokenSource.Token);
+                _context.ConnectionClosed);
         }
 
         /// <inheritdoc />
@@ -244,21 +189,18 @@ namespace FubarDev.FtpServer
 
         /// <inheritdoc />
         [Obsolete("Use the IServiceProvidersFeature")]
-        public IServiceProvider ConnectionServices { get; }
-
-        /// <inheritdoc />
-        public override string ConnectionId { get; set; }
+        public IServiceProvider ConnectionServices => _context.RequestServices;
 
         /// <summary>
         /// Gets the feature collection.
         /// </summary>
-        public override IFeatureCollection Features { get; }
+        public IFeatureCollection Features => _context.Features;
 
         /// <summary>
         /// Gets the cancellation token to use to signal a task cancellation.
         /// </summary>
         [Obsolete("Use the IConnectionLifetimeFeature")]
-        CancellationToken IFtpConnection.CancellationToken => _cancellationTokenSource.Token;
+        CancellationToken IFtpConnection.CancellationToken => _context.ConnectionClosed;
 
         /// <inheritdoc />
         public async Task StartAsync()
@@ -271,15 +213,15 @@ namespace FubarDev.FtpServer
 
                 // Set the default FTP data connection feature
                 var activeDataConnectionFeatureFactory =
-                    _serviceProvider.GetRequiredService<ActiveDataConnectionFeatureFactory>();
+                    _context.RequestServices.GetRequiredService<ActiveDataConnectionFeatureFactory>();
                 var dataConnectionFeature = await activeDataConnectionFeatureFactory
-                   .CreateFeatureAsync(null, _remoteEndPoint, _dataPort)
+                   .CreateFeatureAsync(null, (IPEndPoint)_context.RemoteEndPoint, _dataPort)
                    .ConfigureAwait(false);
                 Features.Set(dataConnectionFeature);
 
                 // Set the checks for the activity information of the FTP connection.
-                var checks = _serviceProvider.GetRequiredService<IEnumerable<IFtpConnectionCheck>>().ToList();
-                _idleCheck.SetChecks(checks);
+                var checks = _context.RequestServices.GetRequiredService<IEnumerable<IFtpConnectionCheck>>().ToList();
+                _context.SetChecks(checks);
 
                 // Connection information
                 var connectionFeature = Features.Get<IConnectionEndPointFeature>();
@@ -289,14 +231,14 @@ namespace FubarDev.FtpServer
                    .ConfigureAwait(false);
                 await _streamReaderService.StartAsync(CancellationToken.None)
                    .ConfigureAwait(false);
-                await _networkStreamFeature.SecureConnectionAdapterManager.StartAsync(CancellationToken.None)
+                await _context.SecureConnectionAdapterManager.StartAsync(CancellationToken.None)
                    .ConfigureAwait(false);
 
                 _commandChannelReader = CommandChannelDispatcherAsync(
                     _ftpCommandChannel.Reader,
-                    _cancellationTokenSource.Token);
+                    _context.ConnectionClosed);
 
-                _serverCommandHandler = SendResponsesAsync(_serverCommandChannel, _cancellationTokenSource.Token);
+                _serverCommandHandler = SendResponsesAsync(_serverCommandChannel, _context.ConnectionClosed);
             }
             finally
             {
@@ -344,7 +286,7 @@ namespace FubarDev.FtpServer
                             await _serverCommandHandler.ConfigureAwait(false);
                         }
 
-                        await _networkStreamFeature.SecureConnectionAdapterManager.StopAsync(CancellationToken.None)
+                        await _context.SecureConnectionAdapterManager.StopAsync(CancellationToken.None)
                            .ConfigureAwait(false);
                         await _streamReaderService.StopAsync(CancellationToken.None)
                            .ConfigureAwait(false);
@@ -358,31 +300,7 @@ namespace FubarDev.FtpServer
                     }
 
                     // Dispose all features (if disposable)
-                    foreach (var featureItem in Features)
-                    {
-                        try
-                        {
-                            switch (featureItem.Value)
-                            {
-                                case IFtpConnection _:
-                                    // Never dispose the connection itself.
-                                    break;
-                                case IFtpDataConnectionFeature feature:
-                                    await feature.DisposeAsync().ConfigureAwait(false);
-                                    break;
-                                case IDisposable disposable:
-                                    disposable.Dispose();
-                                    break;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            // Ignore exceptions
-                            _logger?.LogWarning(ex, "Failed to dispose feature of type {featureType}: {errorMessage}", featureItem.Key, ex.Message);
-                        }
-
-                        Features[featureItem.Key] = null;
-                    }
+                    await Features.ResetAsync(CancellationToken.None, _logger).ConfigureAwait(false);
 
                     _logger?.LogInformation("Connection closed");
                 }
@@ -417,37 +335,8 @@ namespace FubarDev.FtpServer
                 Abort();
             }
 
-            // HINT: This code is now used in three different places:
-            // - FtpConnection.StopAsync
-            // - FtpConnection.Dispose
-            // - ReinCommandHandler.Process
-            //
-            // We really need to clean up this mess!
-            // Dispose all features (if disposable)
-            foreach (var featureItem in Features)
-            {
-                try
-                {
-                    // TODO: Call DisposeAsync on platforms supporting IAsyncDisposable.
-                    switch (featureItem.Value)
-                    {
-                        case IFtpConnection _:
-                            // Never dispose the connection itself.
-                            break;
-                        case IDisposable disposable:
-                            disposable.Dispose();
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Ignore exceptions
-                    _logger?.LogWarning(ex, "Failed to dispose feature of type {featureType}: {errorMessage}", featureItem.Key, ex.Message);
-                }
-            }
-
             _socket.Dispose();
-            _cancellationTokenSource.Dispose();
+            _context.Dispose();
             _loggerScope?.Dispose();
         }
 
@@ -459,7 +348,7 @@ namespace FubarDev.FtpServer
             }
 
             _connectionClosing = true;
-            _cancellationTokenSource.Cancel(true);
+            _context.Abort();
         }
 
         /// <summary>
@@ -532,7 +421,7 @@ namespace FubarDev.FtpServer
                 _logger?.LogDebug("Stopped sending responses");
                 try
                 {
-                    _cancellationTokenSource.Cancel();
+                    _context.Abort();
                 }
                 catch (ObjectDisposedException)
                 {
@@ -551,8 +440,8 @@ namespace FubarDev.FtpServer
         /// <returns>The task.</returns>
         private Task DispatchCommandAsync(FtpContext context)
         {
-            var dispatcher = _serviceProvider.GetRequiredService<IFtpCommandDispatcher>();
-            return dispatcher.DispatchAsync(context, _cancellationTokenSource.Token);
+            var dispatcher = _context.RequestServices.GetRequiredService<IFtpCommandDispatcher>();
+            return dispatcher.DispatchAsync(context, _context.ConnectionClosed);
         }
 
         private void OnClosed()
@@ -561,10 +450,10 @@ namespace FubarDev.FtpServer
         }
 
         private async Task ReadCommandsFromPipeline(
-            PipeReader reader,
             ChannelWriter<FtpCommand> commandWriter,
             CancellationToken cancellationToken)
         {
+            var reader = _context.Transport.Input;
             var collector = new FtpCommandCollector(() => Features.Get<IEncodingFeature>().Encoding);
 
             try
@@ -630,7 +519,7 @@ namespace FubarDev.FtpServer
         private async Task CommandChannelDispatcherAsync(ChannelReader<FtpCommand> commandReader, CancellationToken cancellationToken)
         {
             // Initialize middleware objects
-            var middlewareObjects = _serviceProvider.GetRequiredService<IEnumerable<IFtpMiddleware>>();
+            var middlewareObjects = _context.RequestServices.GetRequiredService<IEnumerable<IFtpMiddleware>>();
             var nextStep = new FtpRequestDelegate(DispatchCommandAsync);
             foreach (var middleware in middlewareObjects.Reverse())
             {
@@ -710,46 +599,18 @@ namespace FubarDev.FtpServer
             }
         }
 
-        private class IdleCheck : IFtpConnectionStatusCheck
-        {
-            private readonly IFtpConnection _connection;
-            private readonly List<IFtpConnectionCheck> _checks = new List<IFtpConnectionCheck>();
-
-            public IdleCheck(IFtpConnection connection)
-            {
-                _connection = connection;
-            }
-
-            /// <inheritdoc />
-            public bool CheckIfAlive()
-            {
-                var context = new FtpConnectionCheckContext(_connection);
-                var checkResults = _checks
-                   .Select(x => x.Check(context))
-                   .ToArray();
-                return checkResults.Select(x => x.IsUsable)
-                   .Aggregate(true, (pv, item) => pv && item);
-            }
-
-            public void SetChecks(IEnumerable<IFtpConnectionCheck> checks)
-            {
-                _checks.Clear();
-                _checks.AddRange(checks);
-            }
-        }
-
         private class ConnectionClosingNetworkStreamReader : StreamPipeReaderService
         {
-            private readonly CancellationTokenSource _connectionClosedCts;
+            private readonly IConnectionLifetimeFeature _lifetimeFeature;
 
             public ConnectionClosingNetworkStreamReader(
                 Stream stream,
                 PipeWriter pipeWriter,
-                CancellationTokenSource connectionClosedCts,
+                IConnectionLifetimeFeature lifetimeFeature,
                 ILogger? logger = null)
-                : base(stream, pipeWriter, connectionClosedCts.Token, logger)
+                : base(stream, pipeWriter, lifetimeFeature.ConnectionClosed, logger)
             {
-                _connectionClosedCts = connectionClosedCts;
+                _lifetimeFeature = lifetimeFeature;
             }
 
             /// <inheritdoc />
@@ -780,55 +641,8 @@ namespace FubarDev.FtpServer
                    .ConfigureAwait(false);
 
                 // Signal a closed connection.
-                _connectionClosedCts.Cancel();
+                _lifetimeFeature.Abort();
             }
-        }
-
-        private class ConnectionFeature
-            : IConnectionEndPointFeature,
-#pragma warning disable 618
-                IConnectionFeature
-#pragma warning restore 618
-        {
-            private IPEndPoint _localEndPoint;
-            private IPEndPoint _remoteEndPoint;
-
-            public ConnectionFeature(
-                IPEndPoint localEndPoint,
-                IPEndPoint remoteEndPoint)
-            {
-                _localEndPoint = localEndPoint;
-                _remoteEndPoint = remoteEndPoint;
-            }
-
-            /// <inheritdoc />
-            public EndPoint RemoteEndPoint
-            {
-                get => _remoteEndPoint;
-                set => _remoteEndPoint = (IPEndPoint)value;
-            }
-
-            /// <inheritdoc />
-            public EndPoint LocalEndPoint
-            {
-                get => _localEndPoint;
-                set => _localEndPoint = (IPEndPoint)value;
-            }
-
-            /// <inheritdoc />
-            IPEndPoint IConnectionFeature.LocalEndPoint => _localEndPoint;
-
-            /// <inheritdoc />
-            IPEndPoint IConnectionFeature.RemoteEndPoint => _remoteEndPoint;
-        }
-
-        private class SecureConnectionFeature : ISecureConnectionFeature
-        {
-            /// <inheritdoc />
-            public CreateEncryptedStreamDelegate CreateEncryptedStream { get; set; } = Task.FromResult;
-
-            /// <inheritdoc />
-            public CloseEncryptedStreamDelegate CloseEncryptedControlStream { get; set; } = ct => Task.CompletedTask;
         }
 
         private class DuplexPipe : IDuplexPipe
@@ -844,66 +658,6 @@ namespace FubarDev.FtpServer
 
             /// <inheritdoc />
             public PipeWriter Output { get; }
-        }
-
-        private class FtpConnectionIdFeature : IConnectionIdFeature
-        {
-            private readonly string _connectionId;
-
-            public FtpConnectionIdFeature(string connectionId)
-            {
-                _connectionId = connectionId;
-            }
-
-            /// <inheritdoc />
-            public string ConnectionId
-            {
-                get => _connectionId;
-                set { }
-            }
-        }
-
-        private class FtpConnectionTransportFeature : IConnectionTransportFeature
-        {
-            public FtpConnectionTransportFeature(IDuplexPipe transport)
-            {
-                Transport = transport;
-            }
-
-            /// <inheritdoc />
-            public IDuplexPipe Transport { get; set; }
-        }
-
-        private class FtpConnectionLifetimeFeature : IConnectionLifetimeFeature
-        {
-            private readonly FtpConnection _connection;
-
-            public FtpConnectionLifetimeFeature(FtpConnection connection)
-            {
-                _connection = connection;
-                ConnectionClosed = connection._cancellationTokenSource.Token;
-            }
-
-            /// <inheritdoc />
-            public CancellationToken ConnectionClosed { get; set; }
-
-            /// <inheritdoc />
-            public void Abort()
-            {
-                _connection.Abort();
-            }
-        }
-
-        private class FtpServiceProviderFeature : IServiceProvidersFeature
-        {
-            public FtpServiceProviderFeature(
-                IServiceProvider serviceProvider)
-            {
-                RequestServices = serviceProvider;
-            }
-
-            /// <inheritdoc />
-            public IServiceProvider RequestServices { get; set; }
         }
     }
 }

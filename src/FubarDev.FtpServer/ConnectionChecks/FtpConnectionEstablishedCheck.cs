@@ -5,6 +5,7 @@
 using System;
 using System.Net.Sockets;
 
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FubarDev.FtpServer.ConnectionChecks
@@ -17,15 +18,15 @@ namespace FubarDev.FtpServer.ConnectionChecks
         /// <inheritdoc />
         public FtpConnectionCheckResult Check(FtpConnectionCheckContext context)
         {
-            var result = IsSocketConnectionEstablished(context.Connection);
+            var result = IsSocketConnectionEstablished(context.Features);
             return new FtpConnectionCheckResult(result);
         }
 
-        private bool IsSocketConnectionEstablished(IFtpConnection connection)
+        private bool IsSocketConnectionEstablished(IFeatureCollection features)
         {
             try
             {
-                var socketAccessor = connection.Features.GetServiceProvider().GetRequiredService<TcpSocketClientAccessor>();
+                var socketAccessor = features.GetServiceProvider().GetRequiredService<TcpSocketClientAccessor>();
                 var client = socketAccessor?.TcpSocketClient;
                 if (client == null)
                 {

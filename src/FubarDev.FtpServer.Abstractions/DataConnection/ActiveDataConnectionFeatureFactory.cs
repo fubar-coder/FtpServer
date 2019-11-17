@@ -68,7 +68,7 @@ namespace FubarDev.FtpServer.DataConnection
                     connection));
         }
 
-        private class ActiveDataConnectionFeature : IFtpDataConnectionFeature
+        private class ActiveDataConnectionFeature : IFtpDataConnectionFeature, IAsyncDisposable
         {
             private readonly IPEndPoint _portAddress;
             private readonly List<IFtpDataConnectionValidator> _validators;
@@ -180,9 +180,14 @@ namespace FubarDev.FtpServer.DataConnection
             }
 
             /// <inheritdoc />
-            public Task DisposeAsync()
+            public async ValueTask DisposeAsync()
             {
-                return _activeDataConnection?.CloseAsync(CancellationToken.None) ?? Task.CompletedTask;
+                if (_activeDataConnection == null)
+                {
+                    return;
+                }
+
+                await _activeDataConnection.CloseAsync(CancellationToken.None);
             }
 
             private bool CloseTcpClient(TcpClient client)

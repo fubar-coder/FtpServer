@@ -2,6 +2,8 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using Microsoft.AspNetCore.Http.Features;
+
 namespace FubarDev.FtpServer.ConnectionChecks
 {
     /// <summary>
@@ -12,15 +14,15 @@ namespace FubarDev.FtpServer.ConnectionChecks
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpConnectionCheckContext"/> class.
         /// </summary>
-        /// <param name="connection">The FTP connection.</param>
-        public FtpConnectionCheckContext(IFtpConnection connection)
+        /// <param name="features">The FTP connection features.</param>
+        public FtpConnectionCheckContext(IFeatureCollection features)
         {
-            Connection = connection;
+            Features = features;
         }
 
         /// <summary>
         /// Gets the FTP connection.
         /// </summary>
-        public IFtpConnection Connection { get; }
+        public IFeatureCollection Features { get; }
     }
 }
