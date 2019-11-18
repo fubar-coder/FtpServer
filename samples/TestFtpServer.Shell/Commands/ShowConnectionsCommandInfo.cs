@@ -8,7 +8,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using ConsoleTables;
+using BetterConsoleTables;
 
 using JKang.IpcServiceFramework;
 
@@ -50,19 +50,30 @@ namespace TestFtpServer.Shell.Commands
                .InvokeAsync(host => host.GetConnections(), cancellationToken)
                .ConfigureAwait(false);
 
-            var table = new ConsoleTable("ID", "Alive", "Remote IP", "User", "Transfer");
-            foreach (var connection in connections)
+            if (connections.Count == 0)
             {
-                table.AddRow(
-                    connection.Id,
-                    connection.IsAlive,
-                    connection.RemoteIp,
-                    connection.User,
-                    connection.HasActiveTransfer);
+                Console.WriteLine("No connections found.");
+                return;
             }
 
-            table.Write();
-            Console.WriteLine();
+            var table = new Table(
+                    TableConfiguration.Markdown(),
+                    "ID",
+                    "Alive",
+                    "Remote IP",
+                    "User",
+                    "Transfer")
+               .AddRows(
+                    connections.Select(
+                        x => new object[]
+                        {
+                            x.Id,
+                            x.IsAlive,
+                            x.RemoteIp,
+                            x.User.ToString(),
+                            x.HasActiveTransfer,
+                        }));
+            Console.WriteLine(table.ToString());
         }
     }
 }
