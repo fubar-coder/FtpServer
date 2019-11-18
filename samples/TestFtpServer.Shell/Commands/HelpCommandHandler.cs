@@ -8,6 +8,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using BetterConsoleTables;
+
+using JKang.IpcServiceFramework;
+
+using TestFtpServer.Api;
+
 namespace TestFtpServer.Shell.Commands
 {
     /// <summary>
@@ -15,12 +21,16 @@ namespace TestFtpServer.Shell.Commands
     /// </summary>
     public class HelpCommandHandler : IRootCommandInfo, IExecutableCommandInfo
     {
-        private readonly IShellStatus _status;
+        private readonly IpcServiceClient<IFtpServerHost> _client;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HelpCommandHandler"/> class.
+        /// </summary>
+        /// <param name="client">The client to be used to communicate with the FTP server.</param>
         public HelpCommandHandler(
-            IShellStatus status)
+            IpcServiceClient<IFtpServerHost> client)
         {
-            _status = status;
+            _client = client;
         }
 
         /// <inheritdoc />
@@ -35,28 +45,61 @@ namespace TestFtpServer.Shell.Commands
             => AsyncEnumerable.Empty<ICommandInfo>();
 
         /// <inheritdoc />
-        public Task ExecuteAsync(CancellationToken cancellationToken)
+        public async Task ExecuteAsync(CancellationToken cancellationToken)
         {
-            Console.WriteLine("help                    - Show help");
-            Console.WriteLine("exit                    - Close this shell");
-            Console.WriteLine("pause                   - Pause accepting clients");
-            Console.WriteLine("continue                - Continue accepting clients");
-            Console.WriteLine("stop                    - Stop the server");
-            Console.WriteLine("status                  - Show server status");
-            Console.WriteLine("show <module>           - Show module information");
-            Console.WriteLine("close connection <name> - Close the connection with the given name");
+            var help = new Table(new EmptyTableConfiguration(), "help", "Show help")
+               .AddRows(
+                    new List<object[]>()
+                    {
+                        new object[] { "exit", "Close this shell" },
+                        new object[] { "pause", "Pause accepting clients" },
+                        new object[] { "continue", "Continue accepting clients" },
+                        new object[] { "stop", "Continue accepting clients" },
+                        new object[] { "status", "Show server status" },
+                        new object[] { "show <module>", "Show module information" },
+                        new object[] { "close connection <name>", "Close the connection with the given name" },
+                    });
+            Console.Write(help.ToString());
 
-            if (_status.ExtendedModuleInfoName.Count != 0)
+            Console.WriteLine();
+            var modules = await GetExtendedModuleNamesAsync(cancellationToken)
+               .ConfigureAwait(false);
+
+            if (modules == null)
             {
-                Console.WriteLine();
-                Console.WriteLine("Modules:");
-                foreach (var moduleName in _status.ExtendedModuleInfoName)
-                {
-                    Console.WriteLine("\t{0}", moduleName);
-                }
+                Console.WriteLine("Modules: Communication failure. No modules found.");
             }
+            else if (modules.Count == 0)
+            {
+                Console.WriteLine("Modules: No modules found.");
+            }
+            else
+            {
+                var modulesTable = new Table(
+                        new EmptyTableConfiguration()
+                        {
+                            hasHeaderRow = true,
+                        },
+                        "Modules")
+                   .AddRows(modules.Select(x => new object[] { x }));
+                Console.WriteLine(modulesTable.ToString());
+            }
+        }
 
-            return Task.CompletedTask;
+        private async Task<ICollection<string>> GetExtendedModuleNamesAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var extendedModuleInfoName = await _client
+                   .InvokeAsync(host => host.GetExtendedModules(), cancellationToken)
+                   .ConfigureAwait(false);
+
+                return extendedModuleInfoName;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

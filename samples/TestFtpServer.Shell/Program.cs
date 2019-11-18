@@ -25,15 +25,10 @@ namespace TestFtpServer.Shell
                    .UseNamedPipe("ftpserver")
                    .Build();
 
-                var simpleModuleInfoNames = await client.InvokeAsync(host => host.GetSimpleModules())
-                   .ConfigureAwait(false);
-                var extendedModuleInfoName = await client.InvokeAsync(host => host.GetExtendedModules())
-                   .ConfigureAwait(false);
-
                 var services = new ServiceCollection()
                    .AddLogging(builder => builder.AddConfiguration(config.GetSection("Logging")).AddConsole())
                    .AddSingleton(client)
-                   .AddSingleton<IShellStatus>(new ShellStatus(simpleModuleInfoNames, extendedModuleInfoName))
+                   .AddSingleton<IShellStatus, ShellStatus>()
                    .Scan(
                         ts => ts
                            .FromAssemblyOf<FtpShellCommandAutoCompletion>()

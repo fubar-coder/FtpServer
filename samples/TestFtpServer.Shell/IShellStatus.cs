@@ -2,8 +2,6 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
-using System.Collections.Generic;
-
 namespace TestFtpServer.Shell
 {
     /// <summary>
@@ -11,16 +9,6 @@ namespace TestFtpServer.Shell
     /// </summary>
     public interface IShellStatus
     {
-        /// <summary>
-        /// Gets or sets the simple module information names.
-        /// </summary>
-        ICollection<string> SimpleModuleInfoNames { get; }
-
-        /// <summary>
-        /// Gets or sets the extended module information names.
-        /// </summary>
-        ICollection<string> ExtendedModuleInfoName { get; }
-
         /// <summary>
         /// Gets or sets a value indicating whether the FTP server should be closed.
         /// </summary>

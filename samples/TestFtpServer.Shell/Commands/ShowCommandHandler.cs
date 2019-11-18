@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,26 +20,16 @@ namespace TestFtpServer.Shell.Commands
     /// </summary>
     public class ShowCommandHandler : IRootCommandInfo
     {
-        private readonly IAsyncEnumerable<ICommandInfo> _subCommands;
+        private readonly IpcServiceClient<IFtpServerHost> _client;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ShowCommandHandler"/> class.
         /// </summary>
         /// <param name="client">The client to be used to communicate with the FTP server.</param>
-        /// <param name="status">The status of the shell.</param>
         public ShowCommandHandler(
-            IpcServiceClient<IFtpServerHost> client,
-            IShellStatus status)
+            IpcServiceClient<IFtpServerHost> client)
         {
-            _subCommands = status.ExtendedModuleInfoName
-               .Select(x => new ModuleCommandInfo(client, x))
-               .Concat(
-                    new ICommandInfo[]
-                    {
-                        new ShowConnectionsCommandInfo(client),
-                    })
-               .ToList()
-               .ToAsyncEnumerable();
+            _client = client;
         }
 
         /// <inheritdoc />
@@ -49,7 +40,24 @@ namespace TestFtpServer.Shell.Commands
 
         /// <param name="cancellationToken"></param>
         /// <inheritdoc />
-        public IAsyncEnumerable<ICommandInfo> GetSubCommandsAsync(CancellationToken cancellationToken) => _subCommands;
+        public async IAsyncEnumerable<ICommandInfo> GetSubCommandsAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var extendedModuleInfoName = await _client
+               .InvokeAsync(host => host.GetExtendedModules(), cancellationToken)
+               .ConfigureAwait(false);
+            var moduleInfos = extendedModuleInfoName
+               .Select(x => new ModuleCommandInfo(_client, x))
+               .Concat(
+                    new ICommandInfo[]
+                    {
+                        new ShowConnectionsCommandInfo(_client),
+                    });
+            foreach (var moduleInfo in moduleInfos)
+            {
+                yield return moduleInfo;
+            }
+        }
 
         private class ModuleCommandInfo : IExecutableCommandInfo
         {
