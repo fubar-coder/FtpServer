@@ -29,14 +29,38 @@ namespace FubarDev.FtpServer
         /// <param name="logger">The logger to be used for logging.</param>
         /// <param name="cancellationToken">The cancellation token to signal command abortion.</param>
         /// <returns>The task with the (optional) response.</returns>
-        public static async Task<IFtpResponse?> ExecuteCommand(
+        [Obsolete("Use the extension method accepting the connection context.")]
+        public static Task<IFtpResponse?> ExecuteCommand(
             this IFtpConnection connection,
             FtpCommand command,
             Func<FtpCommand, CancellationToken, Task<IFtpResponse?>> commandAction,
             ILogger? logger,
             CancellationToken cancellationToken)
         {
-            var localizationFeature = connection.Features.Get<ILocalizationFeature>();
+            var serverCommandWriter = connection.Features.Get<IServerCommandFeature>().ServerCommandWriter;
+            var context = new FtpContext(command, serverCommandWriter, connection);
+            return context.ExecuteCommand(
+                commandAction,
+                logger,
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// Executes some code with error handling.
+        /// </summary>
+        /// <param name="context">The context to execute the code in.</param>
+        /// <param name="commandAction">The action to be executed.</param>
+        /// <param name="logger">The logger to be used for logging.</param>
+        /// <param name="cancellationToken">The cancellation token to signal command abortion.</param>
+        /// <returns>The task with the (optional) response.</returns>
+        public static async Task<IFtpResponse?> ExecuteCommand(
+            this FtpContext context,
+            Func<FtpCommand, CancellationToken, Task<IFtpResponse?>> commandAction,
+            ILogger? logger,
+            CancellationToken cancellationToken)
+        {
+            var localizationFeature = context.Features.Get<ILocalizationFeature>();
+            var command = context.Command;
             IFtpResponse? response;
             try
             {

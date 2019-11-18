@@ -46,7 +46,10 @@ namespace Microsoft.Extensions.DependencyInjection
             services.AddSingleton<ITemporaryDataFactory, TemporaryDataFactory>();
             services.AddSingleton<IPasvListenerFactory, PasvListenerFactory>();
             services.AddSingleton<IPasvAddressResolver, SimplePasvAddressResolver>();
+#pragma warning disable 618
             services.AddSingleton<IFtpConnectionAccessor, FtpConnectionAccessor>();
+#pragma warning restore 618
+            services.AddSingleton<IFtpConnectionContextAccessor, FtpConnectionContextAccessor>();
 
             var commandAssembly = typeof(PassCommandHandler).GetTypeInfo().Assembly;
 
@@ -72,7 +75,6 @@ namespace Microsoft.Extensions.DependencyInjection
             services.AddScoped<TcpSocketClientAccessor>();
             services.AddScoped(sp => sp.GetRequiredService<TcpSocketClientAccessor>().TcpSocketClient);
 
-            services.AddScoped<IFtpConnection, FtpConnection>();
             services.AddScoped<IFtpLoginStateMachine, FtpLoginStateMachine>();
             services.AddScoped<IFtpCommandDispatcher, DefaultFtpCommandDispatcher>();
 

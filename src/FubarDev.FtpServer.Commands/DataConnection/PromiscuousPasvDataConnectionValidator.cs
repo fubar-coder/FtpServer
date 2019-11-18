@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Features;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -39,7 +40,7 @@ namespace FubarDev.FtpServer.DataConnection
 
         /// <inheritdoc />
         public Task<ValidationResult?> ValidateAsync(
-            IFtpConnection connection,
+            ConnectionContext connectionContext,
             IFtpDataConnectionFeature dataConnectionFeature,
             IFtpDataConnection dataConnection,
             CancellationToken cancellationToken)
@@ -60,7 +61,7 @@ namespace FubarDev.FtpServer.DataConnection
                 return Task.FromResult<ValidationResult?>(ValidationResult.Success);
             }
 
-            var connectionFeature = connection.Features.Get<IConnectionEndPointFeature>();
+            var connectionFeature = connectionContext.Features.Get<IConnectionEndPointFeature>();
             var pasvRemoteAddress = dataConnection.RemoteAddress.Address;
             var remoteIpEndPoint = (IPEndPoint)connectionFeature.RemoteEndPoint;
             if (Equals(pasvRemoteAddress, remoteIpEndPoint.Address))
@@ -68,7 +69,7 @@ namespace FubarDev.FtpServer.DataConnection
                 return Task.FromResult<ValidationResult?>(ValidationResult.Success);
             }
 
-            var localizationFeature = connection.Features.Get<ILocalizationFeature>();
+            var localizationFeature = connectionContext.Features.Get<ILocalizationFeature>();
             var errorMessage = string.Format(
                 localizationFeature.Catalog.GetString("Data connection attempt from {0} for control connection from {1}, data connection rejected"),
                 pasvRemoteAddress,

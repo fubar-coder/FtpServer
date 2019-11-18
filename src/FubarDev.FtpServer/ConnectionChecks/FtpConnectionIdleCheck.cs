@@ -47,17 +47,17 @@ namespace FubarDev.FtpServer.ConnectionChecks
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpConnectionIdleCheck"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="options">FTP connection options.</param>
         public FtpConnectionIdleCheck(
-            IFtpConnectionAccessor connectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IOptions<FtpConnectionOptions> options)
         {
-            var connection = connectionAccessor.FtpConnection;
+            var features = connectionContextAccessor.Context.Features;
             _inactivityTimeout = options.Value.InactivityTimeout ?? TimeSpan.MaxValue;
             UpdateLastActiveTime();
 
-            var statisticsCollectorFeature = connection.Features.Get<IFtpStatisticsCollectorFeature>();
+            var statisticsCollectorFeature = features.Get<IFtpStatisticsCollectorFeature>();
             _subscription = statisticsCollectorFeature.Register(new IdleStatisticsCollector(this));
         }
 

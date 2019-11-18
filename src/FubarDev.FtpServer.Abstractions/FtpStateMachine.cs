@@ -8,9 +8,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FubarDev.FtpServer.Compatibility;
 using FubarDev.FtpServer.Features;
 
 using JetBrains.Annotations;
+
+using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace FubarDev.FtpServer
 {
@@ -31,16 +35,41 @@ namespace FubarDev.FtpServer
         /// <param name="connection">The FTP connection.</param>
         /// <param name="transitions">The supported transitions.</param>
         /// <param name="initialStatus">The initial status.</param>
+        [Obsolete("Use the constructor accepting the connection context.")]
         protected FtpStateMachine(
             IFtpConnection connection,
             IEnumerable<Transition> transitions,
             TStatus initialStatus)
         {
             Connection = connection;
+            Features = connection.Features;
             _initialStatus = initialStatus;
             _transitions = transitions
                 .ToLookup(x => x.Source)
                 .ToDictionary(x => x.Key, x => (IReadOnlyCollection<Transition>)x.ToList());
+            Status = initialStatus;
+            _possibleTransitions = GetPossibleTransitions(initialStatus);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="FtpStateMachine{TStatus}"/> class.
+        /// </summary>
+        /// <param name="connectionContext">The FTP connection context.</param>
+        /// <param name="transitions">The supported transitions.</param>
+        /// <param name="initialStatus">The initial status.</param>
+        protected FtpStateMachine(
+            ConnectionContext connectionContext,
+            IEnumerable<Transition> transitions,
+            TStatus initialStatus)
+        {
+#pragma warning disable 618
+            Connection = new FtpConnectionCompat(connectionContext.Features);
+#pragma warning restore 618
+            Features = connectionContext.Features;
+            _initialStatus = initialStatus;
+            _transitions = transitions
+               .ToLookup(x => x.Source)
+               .ToDictionary(x => x.Key, x => (IReadOnlyCollection<Transition>)x.ToList());
             Status = initialStatus;
             _possibleTransitions = GetPossibleTransitions(initialStatus);
         }
@@ -53,7 +82,13 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Gets the connection this state machine belongs to.
         /// </summary>
+        [Obsolete("Access the features directly.")]
         public IFtpConnection Connection { get; }
+
+        /// <summary>
+        /// Gets the FTP connection features.
+        /// </summary>
+        public IFeatureCollection Features { get; }
 
         /// <summary>
         /// Resets the state machine to the initial status.
@@ -160,7 +195,7 @@ namespace FubarDev.FtpServer
         /// <returns>The translated message.</returns>
         protected string T(string message)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message);
         }
 
         /// <summary>
@@ -172,7 +207,7 @@ namespace FubarDev.FtpServer
         [StringFormatMethod("message")]
         protected string T(string message, params object[] args)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
         }
 
         /// <summary>

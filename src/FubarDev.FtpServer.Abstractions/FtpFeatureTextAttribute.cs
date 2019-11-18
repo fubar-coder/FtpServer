@@ -5,6 +5,8 @@
 using System;
 using System.Collections.Generic;
 
+using Microsoft.AspNetCore.Connections;
+
 namespace FubarDev.FtpServer
 {
     /// <summary>
@@ -25,7 +27,7 @@ namespace FubarDev.FtpServer
         }
 
         /// <inheritdoc />
-        public IEnumerable<string> BuildInfo(Type reference, IFtpConnection connection)
+        public IEnumerable<string> BuildInfo(Type reference, ConnectionContext connectionContext)
         {
             return new[] { _featureText };
         }

@@ -16,23 +16,23 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
     /// </summary>
     public class CloseConnectionServerCommandHandler : IServerCommandHandler<CloseConnectionServerCommand>
     {
-        private readonly IFtpConnectionAccessor _connectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CloseConnectionServerCommandHandler"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         public CloseConnectionServerCommandHandler(
-            IFtpConnectionAccessor connectionAccessor)
+            IFtpConnectionContextAccessor connectionContextAccessor)
         {
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
         }
 
         /// <inheritdoc />
         public Task ExecuteAsync(CloseConnectionServerCommand command, CancellationToken cancellationToken)
         {
-            var connection = _connectionAccessor.FtpConnection;
-            var lifetimeFeature = connection.Features.Get<IConnectionLifetimeFeature>();
+            var features = _connectionContextAccessor.Context.Features;
+            var lifetimeFeature = features.Get<IConnectionLifetimeFeature>();
 
             // Just abort the connection. This should avoid problems with an ObjectDisposedException.
             // The "StopAsync" will be called in CommandChannelDispatcherAsync.

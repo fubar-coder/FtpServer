@@ -242,7 +242,7 @@ namespace TestFtpServer
                         {
                             ftpServer.ConfigureConnection += (s, e) =>
                             {
-                                var serviceProvider = e.Connection.Features.Get<IServiceProvidersFeature>().RequestServices;
+                                var serviceProvider = e.ConnectionContext.Features.Get<IServiceProvidersFeature>().RequestServices;
                                 var stateMachine = serviceProvider.GetRequiredService<IFtpLoginStateMachine>();
                                 var authTlsMechanism = serviceProvider.GetRequiredService<IEnumerable<IAuthenticationMechanism>>()
                                    .Single(x => x.CanHandle("TLS"));

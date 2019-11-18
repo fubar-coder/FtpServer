@@ -60,12 +60,12 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpLoginStateMachine"/> class.
         /// </summary>
-        /// <param name="connection">The FTP connection.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="hostSelector">The FTP host selector.</param>
         public FtpLoginStateMachine(
-            IFtpConnection connection,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IFtpHostSelector hostSelector)
-            : base(connection, _transitions, SecurityStatus.Unauthenticated)
+            : base(connectionContextAccessor.Context, _transitions, SecurityStatus.Unauthenticated)
         {
             _hostSelector = hostSelector;
         }
@@ -150,7 +150,7 @@ namespace FubarDev.FtpServer
 
                 if (from == SecurityStatus.Unauthenticated || from == SecurityStatus.NeedSecurityData)
                 {
-                    // Successfull AUTH or ADAT
+                    // Successful AUTH or ADAT
                     _selectedAuthenticationMechanism = _filteredAuthenticationMechanism;
                 }
             }

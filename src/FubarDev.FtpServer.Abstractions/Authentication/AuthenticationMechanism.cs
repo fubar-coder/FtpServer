@@ -2,12 +2,17 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FubarDev.FtpServer.Compatibility;
 using FubarDev.FtpServer.Features;
 
 using JetBrains.Annotations;
+
+using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace FubarDev.FtpServer.Authentication
 {
@@ -19,16 +24,36 @@ namespace FubarDev.FtpServer.Authentication
         /// <summary>
         /// Initializes a new instance of the <see cref="AuthenticationMechanism"/> class.
         /// </summary>
-        /// <param name="connection">The required FTP connection.</param>
+        /// <param name="connection">Fhe FTP connection.</param>
+        [Obsolete("Use the constructor accepting the connection context.")]
         protected AuthenticationMechanism(IFtpConnection connection)
         {
             Connection = connection;
+            Features = connection.Features;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuthenticationMechanism"/> class.
+        /// </summary>
+        /// <param name="context">The FTP connection context.</param>
+        protected AuthenticationMechanism(ConnectionContext context)
+        {
+#pragma warning disable 618
+            Connection = new FtpConnectionCompat(context.Features);
+#pragma warning restore 618
+            Features = context.Features;
         }
 
         /// <summary>
         /// Gets the FTP connection.
         /// </summary>
+        [Obsolete("Access the features directly.")]
         public IFtpConnection Connection { get; }
+
+        /// <summary>
+        /// Gets the connection features.
+        /// </summary>
+        public IFeatureCollection Features { get; }
 
         /// <inheritdoc />
         public abstract void Reset();
@@ -55,7 +80,7 @@ namespace FubarDev.FtpServer.Authentication
         /// <returns>The translated message.</returns>
         protected string T(string message)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message);
         }
 
         /// <summary>
@@ -67,7 +92,7 @@ namespace FubarDev.FtpServer.Authentication
         [StringFormatMethod("message")]
         protected string T(string message, params object[] args)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
         }
     }
 }

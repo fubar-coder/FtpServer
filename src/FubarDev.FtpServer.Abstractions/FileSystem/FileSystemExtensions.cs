@@ -360,7 +360,7 @@ namespace FubarDev.FtpServer.FileSystem
             if (!string.IsNullOrEmpty(path))
             {
                 result.Append(path);
-                addSlash = !path!.EndsWith("/");
+                addSlash = !path.EndsWith("/");
             }
             else
             {
@@ -399,7 +399,7 @@ namespace FubarDev.FtpServer.FileSystem
 
             var isEscaped = false;
             var partCollector = new StringBuilder();
-            foreach (var ch in path!)
+            foreach (var ch in path)
             {
                 if (!isEscaped)
                 {

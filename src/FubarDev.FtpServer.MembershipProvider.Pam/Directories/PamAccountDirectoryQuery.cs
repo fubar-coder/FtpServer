@@ -65,7 +65,7 @@ namespace FubarDev.FtpServer.MembershipProvider.Pam.Directories
             var homePath = ftpUser.FindFirst(FtpClaimTypes.HomePath)?.Value;
             if (!string.IsNullOrEmpty(homePath))
             {
-                return homePath!;
+                return homePath;
             }
 
             return $"/home/{ftpUser.Identity.Name}";

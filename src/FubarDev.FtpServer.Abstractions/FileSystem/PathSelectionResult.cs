@@ -11,7 +11,7 @@ using System.Text;
 namespace FubarDev.FtpServer.FileSystem
 {
     /// <summary>
-    /// The result of a <see cref="PathSelector.SelectAsync(IUnixFileSystem,string?,System.Threading.CancellationToken)"/> operation.
+    /// The result of a select operation of the <see cref="PathSelector"/>.
     /// </summary>
     public class PathSelectionResult
     {

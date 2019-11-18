@@ -12,9 +12,8 @@ using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.Features.Impl;
 using FubarDev.FtpServer.ServerCommands;
 
-using JetBrains.Annotations;
-
 using Microsoft.AspNetCore.Connections.Features;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.Commands
@@ -22,9 +21,9 @@ namespace FubarDev.FtpServer.Commands
     /// <summary>
     /// Default implementation of <see cref="IFtpCommandDispatcher"/>.
     /// </summary>
-    public class DefaultFtpCommandDispatcher : IFtpCommandDispatcher
+    public sealed class DefaultFtpCommandDispatcher : IFtpCommandDispatcher
     {
-        private readonly IFtpConnection _connection;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly IFtpLoginStateMachine _loginStateMachine;
         private readonly IFtpCommandActivator _commandActivator;
         private readonly ILogger<DefaultFtpCommandDispatcher>? _logger;
@@ -33,19 +32,19 @@ namespace FubarDev.FtpServer.Commands
         /// <summary>
         /// Initializes a new instance of the <see cref="DefaultFtpCommandDispatcher"/> class.
         /// </summary>
-        /// <param name="connection">The FTP connection.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="loginStateMachine">The login state machine.</param>
         /// <param name="commandActivator">The command activator.</param>
         /// <param name="middlewareObjects">The list of middleware objects.</param>
         /// <param name="logger">The logger.</param>
         public DefaultFtpCommandDispatcher(
-            IFtpConnection connection,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IFtpLoginStateMachine loginStateMachine,
             IFtpCommandActivator commandActivator,
             IEnumerable<IFtpCommandMiddleware> middlewareObjects,
             ILogger<DefaultFtpCommandDispatcher>? logger = null)
         {
-            _connection = connection;
+            _connectionContextAccessor = connectionContextAccessor;
             _loginStateMachine = loginStateMachine;
             _commandActivator = commandActivator;
             _logger = logger;
@@ -58,6 +57,11 @@ namespace FubarDev.FtpServer.Commands
 
             _executionDelegate = nextStep;
         }
+
+        /// <summary>
+        /// Gets the FTP connection features.
+        /// </summary>
+        private IFeatureCollection Features => _connectionContextAccessor.Context.Features;
 
         /// <inheritdoc />
         public async Task DispatchAsync(FtpContext context, CancellationToken cancellationToken)
@@ -108,19 +112,7 @@ namespace FubarDev.FtpServer.Commands
         /// <returns>The translated message.</returns>
         private string T(string message)
         {
-            return _connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message);
-        }
-
-        /// <summary>
-        /// Translates a message using the current catalog of the active connection.
-        /// </summary>
-        /// <param name="message">The message to translate.</param>
-        /// <param name="args">The format arguments.</param>
-        /// <returns>The translated message.</returns>
-        [StringFormatMethod("message")]
-        private string T(string message, params object[] args)
-        {
-            return _connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message);
         }
 
         private Task ExecuteBackgroundCommandAsync(
@@ -128,7 +120,7 @@ namespace FubarDev.FtpServer.Commands
             IFtpCommandBase handler,
             CancellationToken cancellationToken)
         {
-            var backgroundTaskFeature = _connection.Features.Get<IBackgroundTaskLifetimeFeature?>();
+            var backgroundTaskFeature = Features.Get<IBackgroundTaskLifetimeFeature?>();
             if (backgroundTaskFeature == null)
             {
                 backgroundTaskFeature = new BackgroundTaskLifetimeFeature(
@@ -140,7 +132,7 @@ namespace FubarDev.FtpServer.Commands
                         return _executionDelegate(executionContext);
                     },
                     cancellationToken);
-                _connection.Features.Set(backgroundTaskFeature);
+                Features.Set(backgroundTaskFeature);
                 return Task.CompletedTask;
             }
 
@@ -152,8 +144,7 @@ namespace FubarDev.FtpServer.Commands
         private async Task ExecuteCommandAsync(
             FtpExecutionContext context)
         {
-            var response = await _connection.ExecuteCommand(
-                context.Command,
+            var response = await context.ExecuteCommand(
                 (command, ct) => context.CommandHandler.Process(command, ct),
                 _logger,
                 context.CommandAborted);
@@ -162,7 +153,7 @@ namespace FubarDev.FtpServer.Commands
             {
                 try
                 {
-                    var lifetimeFeature = context.Connection.Features.Get<IConnectionLifetimeFeature>();
+                    var lifetimeFeature = Features.Get<IConnectionLifetimeFeature>();
                     await SendResponseAsync(response, lifetimeFeature.ConnectionClosed)
                        .ConfigureAwait(false);
                 }
@@ -180,7 +171,7 @@ namespace FubarDev.FtpServer.Commands
                 return;
             }
 
-            var serverCommandFeature = _connection.Features.Get<IServerCommandFeature>();
+            var serverCommandFeature = Features.Get<IServerCommandFeature>();
             await serverCommandFeature.ServerCommandWriter
                .WriteAsync(new SendResponseServerCommand(response), cancellationToken)
                .ConfigureAwait(false);

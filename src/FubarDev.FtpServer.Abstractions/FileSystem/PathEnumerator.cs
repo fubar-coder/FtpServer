@@ -32,7 +32,7 @@ namespace FubarDev.FtpServer.FileSystem
                 return Enumerable.Empty<string>().GetEnumerator();
             }
 
-            return SplitPath(_path!).GetEnumerator();
+            return SplitPath(_path).GetEnumerator();
         }
 
         /// <inheritdoc />

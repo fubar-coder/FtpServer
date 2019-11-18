@@ -34,7 +34,7 @@ namespace FubarDev.FtpServer.FileSystem.InMemory
         }
 
         /// <summary>
-        /// Holt ein Objekt über das der Zugriff auf <see cref="Children"/> gesperrt wird.
+        /// Gets an object used to lock the access to <see cref="Children"/>.
         /// </summary>
         public object ChildrenLock { get; } = new object();
 

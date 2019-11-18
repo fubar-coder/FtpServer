@@ -39,10 +39,10 @@ namespace FubarDev.FtpServer.CommandHandlers
         /// <inheritdoc/>
         public override async Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken)
         {
-            var restartPosition = Connection.Features.Get<IRestCommandFeature?>()?.RestartPosition;
-            Connection.Features.Set<IRestCommandFeature?>(null);
+            var restartPosition = Features.Get<IRestCommandFeature?>()?.RestartPosition;
+            Features.Set<IRestCommandFeature?>(null);
 
-            var transferMode = Connection.Features.Get<ITransferConfigurationFeature>().TransferMode;
+            var transferMode = Features.Get<ITransferConfigurationFeature>().TransferMode;
             if (!transferMode.IsBinary && transferMode.FileType != FtpFileType.Ascii)
             {
                 throw new NotSupportedException();
@@ -54,7 +54,7 @@ namespace FubarDev.FtpServer.CommandHandlers
                 return new FtpResponse(501, T("No file name specified"));
             }
 
-            var fsFeature = Connection.Features.Get<IFileSystemFeature>();
+            var fsFeature = Features.Get<IFileSystemFeature>();
             if (!fsFeature.FileSystem.SupportsAppend)
             {
                 return new FtpResponse(550, T("The underlying file system doesn't support this operation."));
@@ -104,7 +104,7 @@ namespace FubarDev.FtpServer.CommandHandlers
             long? restartPosition,
             CancellationToken cancellationToken)
         {
-            var fsFeature = Connection.Features.Get<IFileSystemFeature>();
+            var fsFeature = Features.Get<IFileSystemFeature>();
             var stream = dataConnection.Stream;
             stream.ReadTimeout = 10000;
 

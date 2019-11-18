@@ -16,8 +16,6 @@ using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.ServerCommands;
 using FubarDev.FtpServer.Statistics;
 
-using Microsoft.Extensions.Logging;
-
 namespace FubarDev.FtpServer.CommandHandlers
 {
     /// <summary>
@@ -28,28 +26,23 @@ namespace FubarDev.FtpServer.CommandHandlers
     {
         private readonly IBackgroundTransferWorker _backgroundTransferWorker;
 
-        private readonly ILogger<StorCommandHandler>? _logger;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="StorCommandHandler"/> class.
         /// </summary>
         /// <param name="backgroundTransferWorker">The background transfer worker service.</param>
-        /// <param name="logger">The logger.</param>
         public StorCommandHandler(
-            IBackgroundTransferWorker backgroundTransferWorker,
-            ILogger<StorCommandHandler>? logger = null)
+            IBackgroundTransferWorker backgroundTransferWorker)
         {
             _backgroundTransferWorker = backgroundTransferWorker;
-            _logger = logger;
         }
 
         /// <inheritdoc/>
         public override async Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken)
         {
-            var restartPosition = Connection.Features.Get<IRestCommandFeature?>()?.RestartPosition;
-            Connection.Features.Set<IRestCommandFeature?>(null);
+            var restartPosition = Features.Get<IRestCommandFeature?>()?.RestartPosition;
+            Features.Set<IRestCommandFeature?>(null);
 
-            var transferMode = Connection.Features.Get<ITransferConfigurationFeature>().TransferMode;
+            var transferMode = Features.Get<ITransferConfigurationFeature>().TransferMode;
             if (!transferMode.IsBinary && transferMode.FileType != FtpFileType.Ascii)
             {
                 throw new NotSupportedException();
@@ -61,7 +54,7 @@ namespace FubarDev.FtpServer.CommandHandlers
                 return new FtpResponse(501, T("No file name specified"));
             }
 
-            var fsFeature = Connection.Features.Get<IFileSystemFeature>();
+            var fsFeature = Features.Get<IFileSystemFeature>();
 
             var currentPath = fsFeature.Path.Clone();
             var fileInfo = await fsFeature.FileSystem.SearchFileAsync(currentPath, fileName, cancellationToken).ConfigureAwait(false);
@@ -115,7 +108,7 @@ namespace FubarDev.FtpServer.CommandHandlers
             long? restartPosition,
             CancellationToken cancellationToken)
         {
-            var fsFeature = Connection.Features.Get<IFileSystemFeature>();
+            var fsFeature = Features.Get<IFileSystemFeature>();
             var stream = dataConnection.Stream;
             stream.ReadTimeout = 10000;
 

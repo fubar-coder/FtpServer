@@ -55,18 +55,18 @@ namespace FubarDev.FtpServer.CommandHandlers
             _loginStateMachine.Reset();
 
             // Reinitialize or dispose and remove disposable features
-            await Connection.Features.ResetAsync(cancellationToken, _logger).ConfigureAwait(false);
+            await Features.ResetAsync(cancellationToken, _logger).ConfigureAwait(false);
 
             // Reset the FTP data connection configuration feature
-            Connection.Features.Set<IFtpDataConnectionConfigurationFeature?>(null);
+            Features.Set<IFtpDataConnectionConfigurationFeature?>(null);
 
             // Set the default FTP data connection feature
-            var activeDataConnectionFeatureFactory = Connection.Features.GetServiceProvider().GetRequiredService<ActiveDataConnectionFeatureFactory>();
-            var connectionFeature = Connection.Features.Get<IConnectionEndPointFeature>();
+            var activeDataConnectionFeatureFactory = Features.GetServiceProvider().GetRequiredService<ActiveDataConnectionFeatureFactory>();
+            var connectionFeature = Features.Get<IConnectionEndPointFeature>();
             var remoteIpEndPoint = (IPEndPoint)connectionFeature.RemoteEndPoint;
             var dataConnectionFeature = await activeDataConnectionFeatureFactory.CreateFeatureAsync(null, remoteIpEndPoint, _dataPort)
                .ConfigureAwait(false);
-            Connection.Features.Set(dataConnectionFeature);
+            Features.Set(dataConnectionFeature);
 
             return new FtpResponseTextBlock(220, _serverMessages.GetBannerMessage());
         }

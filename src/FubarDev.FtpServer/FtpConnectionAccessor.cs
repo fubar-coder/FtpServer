@@ -10,6 +10,7 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// Accessor for the active FTP connection.
     /// </summary>
+    [Obsolete("Temporary until we can work both with and without ASP.NET Core")]
     public class FtpConnectionAccessor : IFtpConnectionAccessor
     {
         private static readonly AsyncLocal<FtpConnectionHolder> _ftpConnectionCurrent = new AsyncLocal<FtpConnectionHolder>();

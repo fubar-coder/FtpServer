@@ -22,6 +22,7 @@ using FubarDev.FtpServer.Networking;
 using FubarDev.FtpServer.ServerCommands;
 using FubarDev.FtpServer.Statistics;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -37,14 +38,14 @@ namespace FubarDev.FtpServer
         private readonly FtpServerStatistics _statistics = new FtpServerStatistics();
         private readonly IServiceProvider _serviceProvider;
         private readonly List<IFtpControlStreamAdapter> _controlStreamAdapters;
-        private readonly ConcurrentDictionary<IFtpConnection, FtpConnectionInfo> _connections = new ConcurrentDictionary<IFtpConnection, FtpConnectionInfo>();
+        private readonly ConcurrentDictionary<FtpConnection, FtpConnectionInfo> _connections = new ConcurrentDictionary<FtpConnection, FtpConnectionInfo>();
         private readonly FtpServerListenerService _serverListener;
         private readonly ILogger<FtpServer>? _log;
         private readonly Task _clientReader;
         private readonly Task _connectionStopper;
         private readonly CancellationTokenSource _serverShutdown = new CancellationTokenSource();
         private readonly Timer? _connectionTimeoutChecker;
-        private readonly Channel<IFtpConnection> _stoppedConnectionChannel = Channel.CreateUnbounded<IFtpConnection>();
+        private readonly Channel<FtpConnection> _stoppedConnectionChannel = Channel.CreateUnbounded<FtpConnection>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpServer"/> class.
@@ -132,9 +133,9 @@ namespace FubarDev.FtpServer
         /// The connection might be closed between calling this function and
         /// using/querying the connection by the client.
         /// </remarks>
-        public IEnumerable<IFtpConnection> GetConnections()
+        public IEnumerable<ConnectionContext> GetConnections()
         {
-            return _connections.Keys.ToList();
+            return _connections.Keys.Select(x => x.Context).ToList();
         }
 
         /// <inheritdoc />
@@ -202,9 +203,9 @@ namespace FubarDev.FtpServer
             }
         }
 
-        private IEnumerable<ConnectionInitAsyncDelegate> OnConfigureConnection(IFtpConnection connection)
+        private IEnumerable<ConnectionInitAsyncDelegate> OnConfigureConnection(ConnectionContext connectionContext)
         {
-            var eventArgs = new ConnectionEventArgs(connection);
+            var eventArgs = new ConnectionEventArgs(connectionContext);
             ConfigureConnection?.Invoke(this, eventArgs);
             return eventArgs.AsyncInitFunctions;
         }
@@ -255,7 +256,7 @@ namespace FubarDev.FtpServer
         }
 
         private async Task StopConnectionsAsync(
-            ChannelReader<IFtpConnection> stoppedFtpClients,
+            ChannelReader<FtpConnection> stoppedFtpClients,
             CancellationToken cancellationToken)
         {
             try
@@ -315,9 +316,7 @@ namespace FubarDev.FtpServer
                 socketAccessor.TcpSocketStream = socketStream;
 
                 // Create the connection
-                var connection = scope.ServiceProvider.GetRequiredService<IFtpConnection>();
-                var connectionAccessor = scope.ServiceProvider.GetRequiredService<IFtpConnectionAccessor>();
-                connectionAccessor.FtpConnection = connection;
+                var connection = ActivatorUtilities.CreateInstance<FtpConnection>(scope.ServiceProvider);
 
                 // Get access to the connection lifetime
                 var lifetimeFeature = connection.Features.Get<IConnectionLifetimeFeature>();
@@ -377,10 +376,13 @@ namespace FubarDev.FtpServer
                 _statistics.AddConnection();
 
                 // Connection configuration by host
-                var asyncInitFunctions = OnConfigureConnection(connection);
+                var connectionContext = scope.ServiceProvider
+                   .GetRequiredService<IFtpConnectionContextAccessor>()
+                   .Context;
+                var asyncInitFunctions = OnConfigureConnection(connectionContext);
                 foreach (var asyncInitFunction in asyncInitFunctions)
                 {
-                    await asyncInitFunction(connection, CancellationToken.None)
+                    await asyncInitFunction(connectionContext, CancellationToken.None)
                        .ConfigureAwait(false);
                 }
 
@@ -395,13 +397,13 @@ namespace FubarDev.FtpServer
             }
         }
 
-        private async void RegisterForStop(IFtpConnection connection)
+        private async void RegisterForStop(FtpConnection connection)
         {
             await _stoppedConnectionChannel.Writer.WriteAsync(connection)
                .ConfigureAwait(false);
         }
 
-        private async Task StopConnectionAsync(IFtpConnection connection)
+        private async Task StopConnectionAsync(FtpConnection connection)
         {
             if (!_connections.TryRemove(connection, out var info))
             {

@@ -10,6 +10,7 @@ using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.ServerCommands;
 
 using Microsoft.AspNetCore.Connections.Features;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.ServerCommandHandlers
@@ -19,36 +20,35 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
     /// </summary>
     public class SendResponseServerCommandHandler : IServerCommandHandler<SendResponseServerCommand>
     {
-        private readonly IFtpConnectionAccessor _connectionAccessor;
-
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly ILogger<SendResponseServerCommandHandler>? _logger;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SendResponseServerCommandHandler"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="logger">The logger.</param>
         public SendResponseServerCommandHandler(
-            IFtpConnectionAccessor connectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             ILogger<SendResponseServerCommandHandler>? logger = null)
         {
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
             _logger = logger;
         }
 
         /// <inheritdoc />
         public Task ExecuteAsync(SendResponseServerCommand command, CancellationToken cancellationToken)
         {
-            return WriteResponseAsync(_connectionAccessor.FtpConnection, command.Response, cancellationToken);
+            return WriteResponseAsync(_connectionContextAccessor.Context.Features, command.Response, cancellationToken);
         }
 
         private async Task WriteResponseAsync(
-            IFtpConnection connection,
+            IFeatureCollection features,
             IFtpResponse response,
             CancellationToken cancellationToken)
         {
-            var transportFeature = connection.Features.Get<IConnectionTransportFeature>();
-            var encoding = connection.Features.Get<IEncodingFeature>().Encoding;
+            var transportFeature = features.Get<IConnectionTransportFeature>();
+            var encoding = features.Get<IEncodingFeature>().Encoding;
 
             var writer = transportFeature.Transport.Output;
 

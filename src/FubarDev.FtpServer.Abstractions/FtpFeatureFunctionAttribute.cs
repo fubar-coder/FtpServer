@@ -6,6 +6,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
+using Microsoft.AspNetCore.Connections;
+
 namespace FubarDev.FtpServer
 {
     /// <summary>
@@ -30,11 +32,11 @@ namespace FubarDev.FtpServer
         }
 
         /// <inheritdoc />
-        public IEnumerable<string> BuildInfo(Type reference, IFtpConnection connection)
+        public IEnumerable<string> BuildInfo(Type reference, ConnectionContext connectionContext)
         {
             var method = reference.GetTypeInfo().GetDeclaredMethod(_functionName);
             var result = method
-               .Invoke(null, new object[] { connection });
+               .Invoke(null, new object[] { connectionContext });
             if (result is string s)
             {
                 return new[] { s };

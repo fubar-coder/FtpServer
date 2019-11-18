@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Features;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 
 namespace FubarDev.FtpServer.DataConnection
@@ -23,19 +24,19 @@ namespace FubarDev.FtpServer.DataConnection
     /// </summary>
     public class ActiveDataConnectionFeatureFactory
     {
-        private readonly IFtpConnectionAccessor _connectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly List<IFtpDataConnectionValidator> _validators;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ActiveDataConnectionFeatureFactory"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="validators">An enumeration of FTP connection validators.</param>
         public ActiveDataConnectionFeatureFactory(
-            IFtpConnectionAccessor connectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IEnumerable<IFtpDataConnectionValidator> validators)
         {
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
             _validators = validators.ToList();
         }
 
@@ -51,8 +52,8 @@ namespace FubarDev.FtpServer.DataConnection
             IPEndPoint portEndPoint,
             int? dataPort)
         {
-            var connection = _connectionAccessor.FtpConnection;
-            var connectionFeature = connection.Features.Get<IConnectionEndPointFeature>();
+            var connectionContext = _connectionContextAccessor.Context;
+            var connectionFeature = connectionContext.Features.Get<IConnectionEndPointFeature>();
 
             var localIpEndPoint = (IPEndPoint)connectionFeature.LocalEndPoint;
             var localEndPoint = dataPort != null
@@ -65,14 +66,14 @@ namespace FubarDev.FtpServer.DataConnection
                     portEndPoint,
                     _validators,
                     ftpCommand,
-                    connection));
+                    connectionContext));
         }
 
-        private class ActiveDataConnectionFeature : IFtpDataConnectionFeature, IAsyncDisposable
+        private class ActiveDataConnectionFeature : IFtpDataConnectionFeature
         {
             private readonly IPEndPoint _portAddress;
             private readonly List<IFtpDataConnectionValidator> _validators;
-            private readonly IFtpConnection _ftpConnection;
+            private readonly ConnectionContext _connectionContext;
             private IFtpDataConnection? _activeDataConnection;
 
             public ActiveDataConnectionFeature(
@@ -80,11 +81,11 @@ namespace FubarDev.FtpServer.DataConnection
                 IPEndPoint portAddress,
                 List<IFtpDataConnectionValidator> validators,
                 FtpCommand? command,
-                IFtpConnection ftpConnection)
+                ConnectionContext connectionContext)
             {
                 _portAddress = portAddress;
                 _validators = validators;
-                _ftpConnection = ftpConnection;
+                _connectionContext = connectionContext;
                 LocalEndPoint = localEndPoint;
                 Command = command;
             }
@@ -157,7 +158,11 @@ namespace FubarDev.FtpServer.DataConnection
                         var dataConnection = new ActiveDataConnection(client);
                         foreach (var validator in _validators)
                         {
-                            var validationResult = await validator.ValidateAsync(_ftpConnection, this, dataConnection, cancellationToken)
+                            var validationResult = await validator.ValidateAsync(
+                                    _connectionContext,
+                                    this,
+                                    dataConnection,
+                                    cancellationToken)
                                .ConfigureAwait(false);
                             if (validationResult != ValidationResult.Success && validationResult != null)
                             {

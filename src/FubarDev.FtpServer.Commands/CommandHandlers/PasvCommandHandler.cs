@@ -53,11 +53,11 @@ namespace FubarDev.FtpServer.CommandHandlers
                 }
                 else if (string.Equals(command.Argument, "ALL", StringComparison.OrdinalIgnoreCase))
                 {
-                    var dataConnectionConfigFeature = Connection.Features.Get<IFtpDataConnectionConfigurationFeature?>();
+                    var dataConnectionConfigFeature = Features.Get<IFtpDataConnectionConfigurationFeature?>();
                     if (dataConnectionConfigFeature == null)
                     {
                         dataConnectionConfigFeature = new FtpDataConnectionConfigurationFeature();
-                        Connection.Features.Set(dataConnectionConfigFeature);
+                        Features.Set(dataConnectionConfigFeature);
                     }
 
                     dataConnectionConfigFeature.LimitToEpsv = true;
@@ -81,7 +81,7 @@ namespace FubarDev.FtpServer.CommandHandlers
                     }
                 }
             }
-            else if (Connection.Features.Get<IFtpDataConnectionConfigurationFeature?>()?.LimitToEpsv ?? false)
+            else if (Features.Get<IFtpDataConnectionConfigurationFeature?>()?.LimitToEpsv ?? false)
             {
                 // EPSV ALL was sent from the client
                 return new FtpResponse(
@@ -96,7 +96,7 @@ namespace FubarDev.FtpServer.CommandHandlers
 
             var dataConnectionFeature = await _dataConnectionFeatureFactory.CreateFeatureAsync(command, addressFamily, cancellationToken)
                .ConfigureAwait(false);
-            var oldFeature = Connection.Features.Get<IFtpDataConnectionFeature>();
+            var oldFeature = Features.Get<IFtpDataConnectionFeature>();
             try
             {
                 await oldFeature.DisposeAsync();
@@ -106,7 +106,7 @@ namespace FubarDev.FtpServer.CommandHandlers
                 // Ignore dispose errors!
             }
 
-            Connection.Features.Set(dataConnectionFeature);
+            Features.Set(dataConnectionFeature);
 
             var address = dataConnectionFeature.LocalEndPoint.Address;
             var localPort = dataConnectionFeature.LocalEndPoint.Port;

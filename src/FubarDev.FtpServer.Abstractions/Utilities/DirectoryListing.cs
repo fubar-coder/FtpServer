@@ -98,7 +98,8 @@ namespace FubarDev.FtpServer.Utilities
         public IUnixDirectoryEntry? GrandParentDirectory => _grandParentDirectory;
 
         /// <inheritdoc />
-        public async IAsyncEnumerator<DirectoryListingEntry> GetAsyncEnumerator(CancellationToken cancellationToken)
+        public async IAsyncEnumerator<DirectoryListingEntry> GetAsyncEnumerator(
+            CancellationToken cancellationToken)
         {
             foreach (var (entry, name) in _dotEntries)
             {

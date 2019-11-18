@@ -28,7 +28,7 @@ namespace FubarDev.FtpServer.CommandExtensions
         /// <inheritdoc />
         public override Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken)
         {
-            var encodingFeature = Connection.Features.Get<IEncodingFeature>();
+            var encodingFeature = Features.Get<IEncodingFeature>();
             switch (command.Argument.ToUpperInvariant())
             {
                 case "ON": // Compatibility feature...

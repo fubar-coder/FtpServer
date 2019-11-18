@@ -8,6 +8,8 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Microsoft.AspNetCore.Connections;
+
 namespace FubarDev.FtpServer
 {
     /// <summary>
@@ -18,7 +20,7 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Create a new TcpListener for the given connection.
         /// </summary>
-        /// <param name="connection">connection on which to create the tcp listener.</param>
+        /// <param name="connectionContext">The connection context for which to create the tcp listener.</param>
         /// <param name="addressFamily">The address family for the address to be selected.</param>
         /// <param name="port">listen on the given port, or 0 for any port.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
@@ -26,7 +28,7 @@ namespace FubarDev.FtpServer
         /// <exception cref="ArgumentOutOfRangeException">The chosen port was not within the configured range of ports.</exception>
         /// <returns>A TcpListener.</returns>
         Task<IPasvListener> CreateTcpListenerAsync(
-            IFtpConnection connection,
+            ConnectionContext connectionContext,
             AddressFamily? addressFamily = null,
             int port = 0,
             CancellationToken cancellationToken = default);

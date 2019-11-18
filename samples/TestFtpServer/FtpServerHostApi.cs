@@ -15,6 +15,7 @@ using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.ServerCommands;
 using FubarDev.FtpServer.Statistics;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
@@ -146,6 +147,9 @@ namespace TestFtpServer
         {
             var ftpConnection = ((FtpServer)_ftpServer)
                .GetConnections()
+               .Select(x => x.Features.Get<IServiceProvidersFeature>())
+               .Select(x => x.RequestServices.GetRequiredService<IFtpConnectionContextAccessor>())
+               .Select(x => x.Context)
                .SingleOrDefault(x => IsConnectionWithId(x, connectionId));
             if (ftpConnection == null)
             {
@@ -176,9 +180,9 @@ namespace TestFtpServer
             return Task.CompletedTask;
         }
 
-        private bool IsConnectionWithId(IFtpConnection connection, string connectionId)
+        private bool IsConnectionWithId(ConnectionContext connectionContext, string connectionId)
         {
-            var connIdFeature = connection.Features.Get<IConnectionIdFeature>();
+            var connIdFeature = connectionContext.Features.Get<IConnectionIdFeature>();
             return string.Equals(connIdFeature.ConnectionId, connectionId, StringComparison.OrdinalIgnoreCase);
         }
     }

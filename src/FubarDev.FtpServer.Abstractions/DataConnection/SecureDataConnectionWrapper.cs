@@ -17,19 +17,19 @@ namespace FubarDev.FtpServer.DataConnection
     /// </summary>
     public class SecureDataConnectionWrapper
     {
-        private readonly IFtpConnectionAccessor _connectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SecureDataConnectionWrapper"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">Accessor for the FTP connection.</param>
+        /// <param name="connectionContextAccessor">Accessor for the FTP connection context.</param>
         /// <param name="sslStreamWrapperFactory">The SSL stream wrapper factory.</param>
         public SecureDataConnectionWrapper(
-            IFtpConnectionAccessor connectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             ISslStreamWrapperFactory sslStreamWrapperFactory)
         {
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
             _sslStreamWrapperFactory = sslStreamWrapperFactory;
         }
 
@@ -40,8 +40,8 @@ namespace FubarDev.FtpServer.DataConnection
         /// <returns>The task returning the same or a secure data connection.</returns>
         public async Task<IFtpDataConnection> WrapAsync(IFtpDataConnection dataConnection)
         {
-            var connection = _connectionAccessor.FtpConnection;
-            var secureConnectionFeature = connection.Features.Get<ISecureConnectionFeature>();
+            var features = _connectionContextAccessor.Context.Features;
+            var secureConnectionFeature = features.Get<ISecureConnectionFeature>();
             var newStream = await secureConnectionFeature.CreateEncryptedStream(dataConnection.Stream)
                .ConfigureAwait(false);
 

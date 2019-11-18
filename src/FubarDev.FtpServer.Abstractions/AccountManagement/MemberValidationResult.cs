@@ -63,7 +63,8 @@ namespace FubarDev.FtpServer.AccountManagement
                     throw new InvalidOperationException("User is only available when the authentication was successful.");
                 }
 
-                return _ftpUser!;
+                return _ftpUser
+                    ?? throw new InvalidOperationException("User is only available when the authentication was successful.");
             }
         }
     }

@@ -33,7 +33,7 @@ namespace TestFtpServer.Api
         /// <summary>
         /// Gets all active connections.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>The collection of FTP connections.</returns>
         ICollection<FtpConnectionStatus> GetConnections();
 
         /// <summary>

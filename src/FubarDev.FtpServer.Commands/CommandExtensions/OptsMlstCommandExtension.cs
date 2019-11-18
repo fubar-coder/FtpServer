@@ -24,14 +24,14 @@ namespace FubarDev.FtpServer.CommandExtensions
         /// <inheritdoc />
         public override void InitializeConnectionData()
         {
-            Connection.Features.Set(MlstCommandHandler.CreateMlstFactsFeature());
+            Features.Set(MlstCommandHandler.CreateMlstFactsFeature());
         }
 
         /// <inheritdoc />
         public override Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken)
         {
             var facts = command.Argument.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-            var factsFeature = Connection.Features.Get<IMlstFactsFeature>();
+            var factsFeature = Features.Get<IMlstFactsFeature>();
             factsFeature.ActiveMlstFacts.Clear();
             foreach (var fact in facts)
             {
@@ -42,6 +42,7 @@ namespace FubarDev.FtpServer.CommandExtensions
 
                 factsFeature.ActiveMlstFacts.Add(fact);
             }
+
             return Task.FromResult<IFtpResponse?>(new FtpResponse(200, T("Command okay.")));
         }
     }

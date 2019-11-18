@@ -5,8 +5,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.FtpServer.Features;
-
 using Microsoft.AspNetCore.Connections.Features;
 
 namespace FubarDev.FtpServer.Authorization.Actions
@@ -16,16 +14,16 @@ namespace FubarDev.FtpServer.Authorization.Actions
     /// </summary>
     public class FillConnectionAccountDataAction : IAuthorizationAction
     {
-        private readonly IFtpConnectionAccessor _ftpConnectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FillConnectionAccountDataAction"/> class.
         /// </summary>
-        /// <param name="ftpConnectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         public FillConnectionAccountDataAction(
-            IFtpConnectionAccessor ftpConnectionAccessor)
+            IFtpConnectionContextAccessor connectionContextAccessor)
         {
-            _ftpConnectionAccessor = ftpConnectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
         }
 
         /// <inheritdoc />
@@ -34,9 +32,9 @@ namespace FubarDev.FtpServer.Authorization.Actions
         /// <inheritdoc />
         public Task AuthorizedAsync(IAccountInformation accountInformation, CancellationToken cancellationToken)
         {
-            var connection = _ftpConnectionAccessor.FtpConnection;
+            var features = _connectionContextAccessor.Context.Features;
 
-            var connUserFeature = connection.Features.Get<IConnectionUserFeature>();
+            var connUserFeature = features.Get<IConnectionUserFeature>();
             connUserFeature.User = accountInformation.FtpUser;
 
             return Task.CompletedTask;

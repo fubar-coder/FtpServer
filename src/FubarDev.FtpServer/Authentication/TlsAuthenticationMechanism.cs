@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.ServerCommands;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -26,12 +27,12 @@ namespace FubarDev.FtpServer.Authentication
         /// <summary>
         /// Initializes a new instance of the <see cref="TlsAuthenticationMechanism"/> class.
         /// </summary>
-        /// <param name="connection">The required FTP connection.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="sslStreamWrapperFactory">The SslStream wrapper factory.</param>
         public TlsAuthenticationMechanism(
-            IFtpConnection connection,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             ISslStreamWrapperFactory sslStreamWrapperFactory)
-            : base(connection)
+            : base(connectionContextAccessor.Context)
         {
             _sslStreamWrapperFactory = sslStreamWrapperFactory;
         }
@@ -39,11 +40,11 @@ namespace FubarDev.FtpServer.Authentication
         /// <summary>
         /// Build a string to be returned by the <c>FEAT</c> command handler.
         /// </summary>
-        /// <param name="connection">The FTP connection.</param>
+        /// <param name="connectionContext">The FTP connection context.</param>
         /// <returns>The string(s) to be returned.</returns>
-        public static IEnumerable<string> CreateAuthTlsFeatureString(IFtpConnection connection)
+        public static IEnumerable<string> CreateAuthTlsFeatureString(ConnectionContext connectionContext)
         {
-            var serviceProvider = connection.Features.GetServiceProvider();
+            var serviceProvider = connectionContext.Features.GetServiceProvider();
             var hostSelector = serviceProvider.GetRequiredService<IFtpHostSelector>();
             if (hostSelector.SelectedHost.Certificate != null)
             {
@@ -74,8 +75,8 @@ namespace FubarDev.FtpServer.Authentication
         /// <inheritdoc />
         public override async Task<IFtpResponse> HandleAuthAsync(string methodIdentifier, CancellationToken cancellationToken)
         {
-            var serverCommandWriter = Connection.Features.Get<IServerCommandFeature>().ServerCommandWriter;
-            var hostSelector = Connection.Features.GetServiceProvider().GetRequiredService<IFtpHostSelector>();
+            var serverCommandWriter = Features.Get<IServerCommandFeature>().ServerCommandWriter;
+            var hostSelector = Features.GetServiceProvider().GetRequiredService<IFtpHostSelector>();
 
             if (hostSelector.SelectedHost.Certificate == null)
             {
@@ -117,7 +118,7 @@ namespace FubarDev.FtpServer.Authentication
         {
             IFtpResponse response;
 
-            var hostSelector = Connection.Features.GetServiceProvider().GetRequiredService<IFtpHostSelector>();
+            var hostSelector = Features.GetServiceProvider().GetRequiredService<IFtpHostSelector>();
             if (hostSelector.SelectedHost.Certificate == null)
             {
                 response = new FtpResponse(500, T("Syntax error, command unrecognized."));
@@ -139,14 +140,14 @@ namespace FubarDev.FtpServer.Authentication
         {
             IFtpResponse response;
 
-            var hostSelector = Connection.Features.GetServiceProvider().GetRequiredService<IFtpHostSelector>();
+            var hostSelector = Features.GetServiceProvider().GetRequiredService<IFtpHostSelector>();
             if (hostSelector.SelectedHost.Certificate == null)
             {
                 response = new FtpResponse(500, T("Syntax error, command unrecognized."));
             }
             else
             {
-                var secureConnectionFeature = Connection.Features.Get<ISecureConnectionFeature>();
+                var secureConnectionFeature = Features.Get<ISecureConnectionFeature>();
                 switch (protCode.ToUpperInvariant())
                 {
                     case "C":

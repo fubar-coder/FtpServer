@@ -21,7 +21,7 @@ namespace FubarDev.FtpServer.Commands
             FtpContext ftpContext,
             IFtpCommandBase commandHandler,
             CancellationToken commandAborted)
-            : base(ftpContext.Command, ftpContext.ServerCommandWriter, ftpContext.Connection)
+            : base(ftpContext.Command, ftpContext.ServerCommandWriter, ftpContext.Features)
         {
             CommandHandler = commandHandler;
             CommandAborted = commandAborted;

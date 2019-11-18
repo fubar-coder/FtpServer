@@ -16,8 +16,6 @@ using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.ServerCommands;
 using FubarDev.FtpServer.Statistics;
 
-using Microsoft.Extensions.Logging;
-
 namespace FubarDev.FtpServer.CommandHandlers
 {
     /// <summary>
@@ -28,31 +26,19 @@ namespace FubarDev.FtpServer.CommandHandlers
     {
         private const int BufferSize = 4096;
 
-        private readonly ILogger<RetrCommandHandler>? _logger;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RetrCommandHandler"/> class.
-        /// </summary>
-        /// <param name="logger">The logger.</param>
-        public RetrCommandHandler(
-            ILogger<RetrCommandHandler>? logger = null)
-        {
-            _logger = logger;
-        }
-
         /// <inheritdoc/>
         public override async Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken)
         {
-            var restartPosition = Connection.Features.Get<IRestCommandFeature?>()?.RestartPosition;
-            Connection.Features.Set<IRestCommandFeature?>(null);
+            var restartPosition = Features.Get<IRestCommandFeature?>()?.RestartPosition;
+            Features.Set<IRestCommandFeature?>(null);
 
-            var transferMode = Connection.Features.Get<ITransferConfigurationFeature>().TransferMode;
+            var transferMode = Features.Get<ITransferConfigurationFeature>().TransferMode;
             if (!transferMode.IsBinary && transferMode.FileType != FtpFileType.Ascii)
             {
                 throw new NotSupportedException();
             }
 
-            var fsFeature = Connection.Features.Get<IFileSystemFeature>();
+            var fsFeature = Features.Get<IFileSystemFeature>();
 
             var fileName = command.Argument;
             var currentPath = fsFeature.Path.Clone();

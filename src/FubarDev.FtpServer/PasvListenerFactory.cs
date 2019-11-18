@@ -10,8 +10,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
-using FubarDev.FtpServer.Features;
-
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.Extensions.Logging;
 
@@ -40,7 +39,7 @@ namespace FubarDev.FtpServer
 
         /// <inheritdoc />
         public async Task<IPasvListener> CreateTcpListenerAsync(
-            IFtpConnection connection,
+            ConnectionContext connectionContext,
             AddressFamily? addressFamily,
             int port,
             CancellationToken cancellationToken)
@@ -52,7 +51,7 @@ namespace FubarDev.FtpServer
                 throw new ArgumentOutOfRangeException(nameof(port), "may not be less than 0");
             }
 
-            var pasvOptions = await _addressResolver.GetOptionsAsync(connection, addressFamily, cancellationToken)
+            var pasvOptions = await _addressResolver.GetOptionsAsync(connectionContext, addressFamily, cancellationToken)
                .ConfigureAwait(false);
 
             if (port > 0 && pasvOptions.HasPortRange && (port > pasvOptions.PasvMaxPort || port < pasvOptions.PasvMinPort))
@@ -62,11 +61,11 @@ namespace FubarDev.FtpServer
                     $"must be in {pasvOptions.PasvMinPort}:{pasvOptions.PasvMaxPort}");
             }
 
-            var connectionFeature = connection.Features.Get<IConnectionEndPointFeature>();
+            var connectionFeature = connectionContext.Features.Get<IConnectionEndPointFeature>();
             var localIpEndPoint = (IPEndPoint)connectionFeature.LocalEndPoint;
             if (port == 0 && pasvOptions.HasPortRange)
             {
-                listener = CreateListenerInRange(connection, localIpEndPoint.Address, pasvOptions);
+                listener = CreateListenerInRange(localIpEndPoint.Address, pasvOptions);
             }
             else
             {
@@ -79,12 +78,11 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Gets a listener on a port within the assigned port range.
         /// </summary>
-        /// <param name="connection">Connection for which to create the listener.</param>
         /// <param name="localEndPoint">The local endpoint of the connection.</param>
         /// <param name="pasvOptions">The options for the <see cref="IPasvListener"/>.</param>
         /// <returns>Configured PasvListener.</returns>
         /// <exception cref="SocketException">When no free port could be found, or other bad things happen. See <see cref="SocketError"/>.</exception>
-        private IPasvListener CreateListenerInRange(IFtpConnection connection, IPAddress localEndPoint, PasvListenerOptions pasvOptions)
+        private IPasvListener CreateListenerInRange(IPAddress localEndPoint, PasvListenerOptions pasvOptions)
         {
             lock (_listenerLock)
             {

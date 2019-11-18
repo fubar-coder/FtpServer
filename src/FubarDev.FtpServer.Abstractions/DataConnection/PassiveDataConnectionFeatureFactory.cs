@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Features;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.DataConnection
@@ -24,7 +25,7 @@ namespace FubarDev.FtpServer.DataConnection
     public class PassiveDataConnectionFeatureFactory
     {
         private readonly IPasvListenerFactory _pasvListenerFactory;
-        private readonly IFtpConnectionAccessor _connectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly ILogger<PassiveDataConnectionFeatureFactory>? _logger;
         private readonly List<IFtpDataConnectionValidator> _validators;
 
@@ -32,17 +33,17 @@ namespace FubarDev.FtpServer.DataConnection
         /// Initializes a new instance of the <see cref="PassiveDataConnectionFeatureFactory"/> class.
         /// </summary>
         /// <param name="pasvListenerFactory">The PASV listener factory.</param>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="validators">An enumeration of FTP connection validators.</param>
         /// <param name="logger">The logger.</param>
         public PassiveDataConnectionFeatureFactory(
             IPasvListenerFactory pasvListenerFactory,
-            IFtpConnectionAccessor connectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IEnumerable<IFtpDataConnectionValidator> validators,
             ILogger<PassiveDataConnectionFeatureFactory>? logger = null)
         {
             _pasvListenerFactory = pasvListenerFactory;
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
             _logger = logger;
             _validators = validators.ToList();
         }
@@ -59,9 +60,9 @@ namespace FubarDev.FtpServer.DataConnection
             AddressFamily? addressFamily,
             CancellationToken cancellationToken)
         {
-            var connection = _connectionAccessor.FtpConnection;
+            var connectionContext = _connectionContextAccessor.Context;
             var listener = await _pasvListenerFactory.CreateTcpListenerAsync(
-                connection,
+                _connectionContextAccessor.Context,
                 addressFamily,
                 0,
                 cancellationToken).ConfigureAwait(false);
@@ -69,16 +70,16 @@ namespace FubarDev.FtpServer.DataConnection
                 listener,
                 _validators,
                 ftpCommand,
-                connection,
+                connectionContext,
                 listener.PasvEndPoint,
                 _logger);
         }
 
-        private class PassiveDataConnectionFeature : IFtpDataConnectionFeature, IAsyncDisposable
+        private class PassiveDataConnectionFeature : IFtpDataConnectionFeature
         {
             private readonly IPasvListener _listener;
             private readonly List<IFtpDataConnectionValidator> _validators;
-            private readonly IFtpConnection _ftpConnection;
+            private readonly ConnectionContext _connectionContext;
             private readonly ILogger? _logger;
             private IFtpDataConnection? _activeDataConnection;
 
@@ -86,13 +87,13 @@ namespace FubarDev.FtpServer.DataConnection
                 IPasvListener listener,
                 List<IFtpDataConnectionValidator> validators,
                 FtpCommand? command,
-                IFtpConnection ftpConnection,
+                ConnectionContext connectionContext,
                 IPEndPoint localEndPoint,
                 ILogger? logger)
             {
                 _listener = listener;
                 _validators = validators;
-                _ftpConnection = ftpConnection;
+                _connectionContext = connectionContext;
                 _logger = logger;
                 LocalEndPoint = localEndPoint;
                 Command = command;
@@ -135,7 +136,11 @@ namespace FubarDev.FtpServer.DataConnection
                     var dataConnection = new PassiveDataConnection(client);
                     foreach (var validator in _validators)
                     {
-                        var validationResult = await validator.ValidateAsync(_ftpConnection, this, dataConnection, cancellationToken)
+                        var validationResult = await validator.ValidateAsync(
+                                _connectionContext,
+                                this,
+                                dataConnection,
+                                cancellationToken)
                            .ConfigureAwait(false);
                         if (validationResult != ValidationResult.Success && validationResult != null)
                         {

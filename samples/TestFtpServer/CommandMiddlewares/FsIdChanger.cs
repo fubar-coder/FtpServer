@@ -46,15 +46,15 @@ namespace TestFtpServer.CommandMiddlewares
         /// <inheritdoc />
         public Task InvokeAsync(FtpExecutionContext context, FtpCommandExecutionDelegate next)
         {
-            var connection = context.Connection;
-            var authInfo = connection.Features.Get<IConnectionUserFeature>();
+            var features = context.Features;
+            var authInfo = features.Get<IConnectionUserFeature>();
             var isUnixUser = authInfo.User?.IsUnixUser() ?? false;
             if (!isUnixUser)
             {
                 return next(context);
             }
 
-            var fsInfo = connection.Features.Get<IFileSystemFeature>();
+            var fsInfo = features.Get<IFileSystemFeature>();
             if (!(fsInfo.FileSystem is UnixFileSystem))
             {
                 return next(context);
@@ -81,24 +81,22 @@ namespace TestFtpServer.CommandMiddlewares
             var userId = ConvertToLong(unixUser.FindFirst(FtpClaimTypes.UserId)?.Value) ?? uint.MaxValue;
             var groupId = ConvertToLong(unixUser.FindFirst(FtpClaimTypes.GroupId)?.Value) ?? uint.MaxValue;
 
-            using (var contextThread = new AsyncContextThread())
-            {
-                await contextThread.Factory.Run(
-                        async () =>
+            using var contextThread = new AsyncContextThread();
+            await contextThread.Factory.Run(
+                    async () =>
+                    {
+                        using (new UnixFileSystemIdChanger(
+                            _logger,
+                            userId,
+                            groupId,
+                            _serverUser.UserId,
+                            _serverUser.GroupId))
                         {
-                            using (new UnixFileSystemIdChanger(
-                                _logger,
-                                userId,
-                                groupId,
-                                _serverUser.UserId,
-                                _serverUser.GroupId))
-                            {
-                                await next(context).ConfigureAwait(true);
-                            }
-                        })
-                   .ConfigureAwait(true);
-                await contextThread.JoinAsync().ConfigureAwait(false);
-            }
+                            await next(context).ConfigureAwait(true);
+                        }
+                    })
+               .ConfigureAwait(true);
+            await contextThread.JoinAsync().ConfigureAwait(false);
         }
 
         /// <summary>

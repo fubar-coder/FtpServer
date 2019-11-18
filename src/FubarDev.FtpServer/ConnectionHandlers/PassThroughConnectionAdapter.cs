@@ -25,7 +25,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         /// Initializes a new instance of the <see cref="PassThroughConnectionAdapter"/> class.
         /// </summary>
         /// <param name="socketPipe">The pipe for the socket.</param>
-        /// <param name="connectionPipe">The pipe for the <see cref="IFtpConnection"/>.</param>
+        /// <param name="connectionPipe">The pipe for the FTP connection.</param>
         /// <param name="connectionClosed">A cancellation token for a closed connection.</param>
         /// <param name="loggerFactory">The logger factory.</param>
         public PassThroughConnectionAdapter(

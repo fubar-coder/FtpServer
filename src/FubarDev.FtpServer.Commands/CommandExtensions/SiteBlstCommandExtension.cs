@@ -99,7 +99,7 @@ namespace FubarDev.FtpServer.CommandExtensions
 
         private async Task<IFtpResponse?> ExecuteSend(IFtpDataConnection dataConnection, CancellationToken cancellationToken)
         {
-            var encoding = Connection.Features.Get<IEncodingFeature>().Encoding;
+            var encoding = Features.Get<IEncodingFeature>().Encoding;
             var stream = dataConnection.Stream;
             using (var writer = new StreamWriter(stream, encoding, 4096, true)
             {

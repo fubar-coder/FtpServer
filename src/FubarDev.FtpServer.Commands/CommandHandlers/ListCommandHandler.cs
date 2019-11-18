@@ -68,7 +68,7 @@ namespace FubarDev.FtpServer.CommandHandlers
 
         private async Task<IFtpResponse?> ExecuteSend(IFtpDataConnection dataConnection, FtpCommand command, CancellationToken cancellationToken)
         {
-            var encodingFeature = Connection.Features.Get<IEncodingFeature>();
+            var encodingFeature = Features.Get<IEncodingFeature>();
 
             // Parse arguments in a way that's compatible with broken FTP clients
             var argument = new ListArguments(command.Argument);
@@ -103,7 +103,7 @@ namespace FubarDev.FtpServer.CommandHandlers
             // Parse the given path to determine the mask (e.g. when information about a file was requested)
             var directoriesToProcess = new Queue<DirectoryQueueItem>();
 
-            var fsFeature = Connection.Features.Get<IFileSystemFeature>();
+            var fsFeature = Features.Get<IFileSystemFeature>();
 
             // Use braces to avoid the definition of mask and path in the following parts
             // of this function.
@@ -125,7 +125,7 @@ namespace FubarDev.FtpServer.CommandHandlers
                         {
                             if (!string.IsNullOrEmpty(foundEntry.FileName))
                             {
-                                mask = foundEntry.FileName!;
+                                mask = foundEntry.FileName;
                             }
                         }
                         else if (!dirEntry.IsRoot)

@@ -34,17 +34,17 @@ namespace FubarDev.FtpServer.Statistics
         public string TransferId { get; }
 
         /// <summary>
-        /// The file transfer mode.
+        /// Gets the file transfer mode.
         /// </summary>
         public FtpFileTransferMode Mode { get; }
 
         /// <summary>
-        /// The command that initiated the file transfer.
+        /// Gets the command that initiated the file transfer.
         /// </summary>
         public FtpCommand Command { get; }
 
         /// <summary>
-        /// The absolute path as seen by the client.
+        /// Gets the absolute path as seen by the client.
         /// </summary>
         public string Path { get; }
     }

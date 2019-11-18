@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace FubarDev.FtpServer
 {
     /// <summary>
-    /// A delegate that's used to create an encrypted stream (<see cref="FtpConnectionData.CreateEncryptedStream"/>).
+    /// A delegate that's used to create an encrypted stream.
     /// </summary>
     /// <param name="unencryptedStream">The unencrypted stream.</param>
     /// <returns>The encrypted stream.</returns>

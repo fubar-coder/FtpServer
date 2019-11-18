@@ -27,6 +27,7 @@ using FubarDev.FtpServer.Localization;
 using FubarDev.FtpServer.Networking;
 using FubarDev.FtpServer.ServerCommands;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,8 +42,6 @@ namespace FubarDev.FtpServer
     public sealed class FtpConnection : IFtpConnection
     {
         private readonly TcpClient _socket;
-
-        private readonly IFtpConnectionAccessor _connectionAccessor;
 
         private readonly IServerCommandExecutor _serverCommandExecutor;
 
@@ -108,6 +107,7 @@ namespace FubarDev.FtpServer
         /// <param name="options">The options for the FTP connection.</param>
         /// <param name="portOptions">The <c>PORT</c> command options.</param>
         /// <param name="connectionAccessor">The accessor to get the connection that is active during the <see cref="FtpCommandHandler.Process"/> method execution.</param>
+        /// <param name="connectionContextAccessor">The accessor to get the FTP connection context.</param>
         /// <param name="catalogLoader">The catalog loader for the FTP server.</param>
         /// <param name="serverCommandExecutor">The executor for server commands.</param>
         /// <param name="serviceProvider">The service provider for the connection.</param>
@@ -119,7 +119,10 @@ namespace FubarDev.FtpServer
             TcpSocketClientAccessor socketAccessor,
             IOptions<FtpConnectionOptions> options,
             IOptions<PortCommandOptions> portOptions,
+#pragma warning disable 618
             IFtpConnectionAccessor connectionAccessor,
+#pragma warning restore 618
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IFtpCatalogLoader catalogLoader,
             IServerCommandExecutor serverCommandExecutor,
             IServiceProvider serviceProvider,
@@ -149,6 +152,11 @@ namespace FubarDev.FtpServer
                 remoteEndPoint,
                 serviceProvider);
 
+#pragma warning disable 618
+            connectionAccessor.FtpConnection = this;
+#pragma warning restore 618
+            connectionContextAccessor.Context = _context;
+
             var properties = new Dictionary<string, object?>
             {
                 ["RemoteAddress"] = remoteEndPoint.ToString(),
@@ -161,7 +169,6 @@ namespace FubarDev.FtpServer
             _loggerScope = logger?.BeginScope(properties);
 
             _dataPort = portOptions.Value.DataPort;
-            _connectionAccessor = connectionAccessor;
             _serverCommandExecutor = serverCommandExecutor;
             _secureDataConnectionWrapper = secureDataConnectionWrapper;
 
@@ -202,15 +209,17 @@ namespace FubarDev.FtpServer
         [Obsolete("Use the IConnectionLifetimeFeature")]
         CancellationToken IFtpConnection.CancellationToken => _context.ConnectionClosed;
 
+        /// <summary>
+        /// Gets the connection context.
+        /// </summary>
+        public ConnectionContext Context => _context;
+
         /// <inheritdoc />
         public async Task StartAsync()
         {
             await _serviceControl.WaitAsync().ConfigureAwait(false);
             try
             {
-                // Initialize the FTP connection accessor
-                _connectionAccessor.FtpConnection = this;
-
                 // Set the default FTP data connection feature
                 var activeDataConnectionFeatureFactory =
                     _context.RequestServices.GetRequiredService<ActiveDataConnectionFeatureFactory>();
@@ -577,7 +586,7 @@ namespace FubarDev.FtpServer
                             statisticsCollectorFeature.ForEach(collector => collector.ReceivedCommand(receivedCommand));
 
                             _logger?.LogCommand(command);
-                            var context = new FtpContext(command, _serverCommandChannel, this);
+                            var context = new FtpContext(command, _serverCommandChannel, _context.Features);
                             await requestDelegate(context)
                                .ConfigureAwait(false);
                         }

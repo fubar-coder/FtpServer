@@ -3,7 +3,6 @@
 // </copyright>
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +10,8 @@ using System.Threading.Tasks;
 using FubarDev.FtpServer.Features;
 
 using JetBrains.Annotations;
+
+using Microsoft.AspNetCore.Http.Features;
 
 namespace FubarDev.FtpServer.CommandExtensions
 {
@@ -20,13 +21,6 @@ namespace FubarDev.FtpServer.CommandExtensions
     public abstract class FtpCommandHandlerExtension : IFtpCommandHandlerExtension
     {
         private FtpCommandHandlerContext? _commandHandlerContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FtpCommandHandlerExtension"/> class.
-        /// </summary>
-        protected FtpCommandHandlerExtension()
-        {
-        }
 
         /// <summary>
         /// Gets or sets the FTP command context.
@@ -47,7 +41,13 @@ namespace FubarDev.FtpServer.CommandExtensions
         /// <summary>
         /// Gets the connection this command was created for.
         /// </summary>
+        [Obsolete("Access the features directly.")]
         protected IFtpConnection Connection => FtpContext.Connection;
+
+        /// <summary>
+        /// Gets the connection features.
+        /// </summary>
+        protected IFeatureCollection Features => FtpContext.Features;
 
         /// <inheritdoc />
         public abstract void InitializeConnectionData();
@@ -62,7 +62,7 @@ namespace FubarDev.FtpServer.CommandExtensions
         /// <returns>The translated message.</returns>
         protected string T(string message)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message);
         }
 
         /// <summary>
@@ -74,7 +74,7 @@ namespace FubarDev.FtpServer.CommandExtensions
         [StringFormatMethod("message")]
         protected string T(string message, params object[] args)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
         }
     }
 }

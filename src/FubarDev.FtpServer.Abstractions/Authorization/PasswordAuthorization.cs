@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.AccountManagement;
 using FubarDev.FtpServer.Authentication;
-using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.Localization;
 
 using Microsoft.AspNetCore.Connections.Features;
@@ -34,16 +33,16 @@ namespace FubarDev.FtpServer.Authorization
         /// <summary>
         /// Initializes a new instance of the <see cref="PasswordAuthorization"/> class.
         /// </summary>
-        /// <param name="connection">The required FTP connection.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="membershipProviders">The membership providers for password authorization.</param>
         /// <param name="authorizationActions">Actions to be executed upon authorization.</param>
         /// <param name="serverMessages">The FTP server messages.</param>
         public PasswordAuthorization(
-            IFtpConnection connection,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IEnumerable<IMembershipProvider> membershipProviders,
             IEnumerable<IAuthorizationAction> authorizationActions,
             IFtpServerMessages serverMessages)
-            : base(connection)
+            : base(connectionContextAccessor.Context)
         {
             _serverMessages = serverMessages;
             _authorizationActions = authorizationActions.OrderByDescending(x => x.Level).ToList();
@@ -94,7 +93,7 @@ namespace FubarDev.FtpServer.Authorization
             _userName = userIdentifier;
             _needsPassword = true;
 
-            var authInfoFeature = Connection.Features.Get<IConnectionUserFeature>();
+            var authInfoFeature = Features.Get<IConnectionUserFeature>();
             authInfoFeature.User = new ClaimsPrincipal(
                 new ClaimsIdentity(
                     new[]

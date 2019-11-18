@@ -19,8 +19,7 @@ namespace FubarDev.FtpServer.Authorization.Actions
     /// </summary>
     public class SetHomeDirectoryAction : IAuthorizationAction
     {
-        private readonly IFtpConnectionAccessor _ftpConnectionAccessor;
-
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly IAccountDirectoryQuery _accountDirectoryQuery;
 
         private readonly ILogger<SetHomeDirectoryAction>? _logger;
@@ -31,16 +30,16 @@ namespace FubarDev.FtpServer.Authorization.Actions
         /// Initializes a new instance of the <see cref="SetHomeDirectoryAction"/> class.
         /// </summary>
         /// <param name="options">The options for the <see cref="SetHomeDirectoryAction"/>.</param>
-        /// <param name="ftpConnectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="accountDirectoryQuery">Interface to query account directories.</param>
         /// <param name="logger">The logger.</param>
         public SetHomeDirectoryAction(
             IOptions<SetHomeDirectoryActionOptions> options,
-            IFtpConnectionAccessor ftpConnectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IAccountDirectoryQuery accountDirectoryQuery,
             ILogger<SetHomeDirectoryAction>? logger = null)
         {
-            _ftpConnectionAccessor = ftpConnectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
             _accountDirectoryQuery = accountDirectoryQuery;
             _logger = logger;
             _createMissingDirectories = options.Value.CreateMissingDirectories;
@@ -52,8 +51,8 @@ namespace FubarDev.FtpServer.Authorization.Actions
         /// <inheritdoc />
         public async Task AuthorizedAsync(IAccountInformation accountInformation, CancellationToken cancellationToken)
         {
-            var connection = _ftpConnectionAccessor.FtpConnection;
-            var fsFeature = connection.Features.Get<IFileSystemFeature>();
+            var features = _connectionContextAccessor.Context.Features;
+            var fsFeature = features.Get<IFileSystemFeature>();
             var fileSystem = fsFeature.FileSystem;
             var directories = _accountDirectoryQuery.GetDirectories(accountInformation);
             Stack<IUnixDirectoryEntry>? path = null;

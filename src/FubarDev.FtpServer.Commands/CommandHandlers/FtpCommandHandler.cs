@@ -15,6 +15,7 @@ using FubarDev.FtpServer.Localization;
 
 using JetBrains.Annotations;
 
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FubarDev.FtpServer.CommandHandlers
@@ -27,13 +28,6 @@ namespace FubarDev.FtpServer.CommandHandlers
         private IFtpServerMessages? _serverMessages;
         private IServiceProvider? _requestServices;
         private FtpCommandHandlerContext? _commandHandlerContext;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FtpCommandHandler"/> class.
-        /// </summary>
-        protected FtpCommandHandler()
-        {
-        }
 
         /// <summary>
         /// Gets or sets the FTP command context.
@@ -54,7 +48,13 @@ namespace FubarDev.FtpServer.CommandHandlers
         /// <summary>
         /// Gets the connection this command was created for.
         /// </summary>
+        [Obsolete("Access the features directly.")]
         protected IFtpConnection Connection => FtpContext.Connection;
+
+        /// <summary>
+        /// Gets the connection features.
+        /// </summary>
+        protected IFeatureCollection Features => FtpContext.Features;
 
         /// <summary>
         /// Gets the server messages to be returned.
@@ -66,7 +66,7 @@ namespace FubarDev.FtpServer.CommandHandlers
         /// Gets the services for the request.
         /// </summary>
         protected IServiceProvider RequestServices
-            => _requestServices ??= Connection.Features.GetServiceProvider();
+            => _requestServices ??= Features.GetServiceProvider();
 
         /// <inheritdoc />
         public abstract Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken);
@@ -78,7 +78,7 @@ namespace FubarDev.FtpServer.CommandHandlers
         /// <returns>The translated message.</returns>
         protected string T(string message)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message);
         }
 
         /// <summary>
@@ -90,7 +90,7 @@ namespace FubarDev.FtpServer.CommandHandlers
         [StringFormatMethod("message")]
         protected string T(string message, params object?[] args)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
         }
     }
 }

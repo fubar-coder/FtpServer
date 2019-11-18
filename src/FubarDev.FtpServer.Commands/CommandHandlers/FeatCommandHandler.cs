@@ -13,6 +13,8 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Commands;
 
+using Microsoft.AspNetCore.Connections;
+
 namespace FubarDev.FtpServer.CommandHandlers
 {
     /// <summary>
@@ -21,18 +23,22 @@ namespace FubarDev.FtpServer.CommandHandlers
     [FtpCommandHandler("FEAT", isLoginRequired: false)]
     public class FeatCommandHandler : FtpCommandHandler
     {
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
         private readonly IFeatureInfoProvider _featureInfoProvider;
         private readonly IFtpLoginStateMachine _loginStateMachine;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FeatCommandHandler"/> class.
         /// </summary>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         /// <param name="featureInfoProvider">Provider for feature information.</param>
         /// <param name="loginStateMachine">The login state machine.</param>
         public FeatCommandHandler(
+            IFtpConnectionContextAccessor connectionContextAccessor,
             IFeatureInfoProvider featureInfoProvider,
             IFtpLoginStateMachine loginStateMachine)
         {
+            _connectionContextAccessor = connectionContextAccessor;
             _featureInfoProvider = featureInfoProvider;
             _loginStateMachine = loginStateMachine;
         }
@@ -43,7 +49,7 @@ namespace FubarDev.FtpServer.CommandHandlers
             var isAuthorized = _loginStateMachine.Status == SecurityStatus.Authorized;
             var features = _featureInfoProvider.GetFeatureInfoItems()
                .Where(x => IsFeatureAllowed(x, isAuthorized))
-               .SelectMany(BuildInfo)
+               .SelectMany(x => BuildInfo(_connectionContextAccessor.Context, x))
                .Distinct(StringComparer.OrdinalIgnoreCase)
                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                .ToList();
@@ -61,21 +67,23 @@ namespace FubarDev.FtpServer.CommandHandlers
                     features.Distinct(StringComparer.OrdinalIgnoreCase)));
         }
 
-        private IEnumerable<string> BuildInfo(FoundFeatureInfo foundFeatureInfo)
+        private IEnumerable<string> BuildInfo(
+            ConnectionContext context,
+            FoundFeatureInfo foundFeatureInfo)
         {
             if (foundFeatureInfo.IsCommandHandler)
             {
-                return foundFeatureInfo.FeatureInfo.BuildInfo(foundFeatureInfo.CommandHandlerInfo.Type, Connection);
+                return foundFeatureInfo.FeatureInfo.BuildInfo(foundFeatureInfo.CommandHandlerInfo.Type, context);
             }
 
             if (foundFeatureInfo.IsExtension)
             {
-                return foundFeatureInfo.FeatureInfo.BuildInfo(foundFeatureInfo.ExtensionInfo.Type, Connection);
+                return foundFeatureInfo.FeatureInfo.BuildInfo(foundFeatureInfo.ExtensionInfo.Type, context);
             }
 
             if (foundFeatureInfo.IsAuthenticationMechanism)
             {
-                return foundFeatureInfo.FeatureInfo.BuildInfo(foundFeatureInfo.AuthenticationMechanism.GetType(), Connection);
+                return foundFeatureInfo.FeatureInfo.BuildInfo(foundFeatureInfo.AuthenticationMechanism.GetType(), context);
             }
 
             throw new NotSupportedException("Unknown feature source.");

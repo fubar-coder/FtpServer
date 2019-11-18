@@ -46,7 +46,7 @@ namespace FubarDev.FtpServer.CommandHandlers
         /// <inheritdoc/>
         public override async Task<IFtpResponse?> Process(FtpCommand command, CancellationToken cancellationToken)
         {
-            if (Connection.Features.Get<IFtpDataConnectionConfigurationFeature?>()?.LimitToEpsv ?? false)
+            if (Features.Get<IFtpDataConnectionConfigurationFeature?>()?.LimitToEpsv ?? false)
             {
                 // EPSV ALL was sent from the client
                 return new FtpResponse(
@@ -56,7 +56,7 @@ namespace FubarDev.FtpServer.CommandHandlers
 
             try
             {
-                var connectionFeature = Connection.Features.Get<IConnectionEndPointFeature>();
+                var connectionFeature = Features.Get<IConnectionEndPointFeature>();
                 var remoteIpEndPoint = (IPEndPoint)connectionFeature.RemoteEndPoint;
                 var address = Parse(command.Argument, remoteIpEndPoint);
                 if (address == null)
@@ -66,7 +66,7 @@ namespace FubarDev.FtpServer.CommandHandlers
 
                 var feature = await _dataConnectionFeatureFactory.CreateFeatureAsync(command, address, _options.DataPort)
                    .ConfigureAwait(false);
-                var oldFeature = Connection.Features.Get<IFtpDataConnectionFeature>();
+                var oldFeature = Features.Get<IFtpDataConnectionFeature>();
                 try
                 {
                     await oldFeature.DisposeAsync();
@@ -76,7 +76,7 @@ namespace FubarDev.FtpServer.CommandHandlers
                     // Ignore dispose errors!
                 }
 
-                Connection.Features.Set(feature);
+                Features.Set(feature);
             }
             catch (NotSupportedException ex)
             {
@@ -99,9 +99,9 @@ namespace FubarDev.FtpServer.CommandHandlers
                 return null;
             }
 
-            return IsEnhancedAddress(address!)
-                ? ParseEnhanced(address!, remoteEndPoint)
-                : ParseLegacy(address!);
+            return IsEnhancedAddress(address)
+                ? ParseEnhanced(address, remoteEndPoint)
+                : ParseLegacy(address);
         }
 
         private static bool IsEnhancedAddress(string address)

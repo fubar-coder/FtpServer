@@ -6,10 +6,12 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FubarDev.FtpServer.DataConnection;
 using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.ServerCommands;
 using FubarDev.FtpServer.Statistics;
 
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.ServerCommandHandlers
@@ -19,36 +21,44 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
     /// </summary>
     public class DataConnectionServerCommandHandler : IServerCommandHandler<DataConnectionServerCommand>
     {
-        private readonly IFtpConnectionAccessor _connectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
+        private readonly SecureDataConnectionWrapper _secureDataConnectionWrapper;
         private readonly ILogger<DataConnectionServerCommandHandler>? _logger;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DataConnectionServerCommandHandler"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
+        /// <param name="secureDataConnectionWrapper">Wraps a data connection into an SSL stream.</param>
         /// <param name="logger">The logger.</param>
         public DataConnectionServerCommandHandler(
-            IFtpConnectionAccessor connectionAccessor,
+            IFtpConnectionContextAccessor connectionContextAccessor,
+            SecureDataConnectionWrapper secureDataConnectionWrapper,
             ILogger<DataConnectionServerCommandHandler>? logger = null)
         {
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
+            _secureDataConnectionWrapper = secureDataConnectionWrapper;
             _logger = logger;
         }
 
         /// <inheritdoc />
         public async Task ExecuteAsync(DataConnectionServerCommand command, CancellationToken cancellationToken)
         {
-            var connection = _connectionAccessor.FtpConnection;
-            var serverCommandWriter = connection.Features.Get<IServerCommandFeature>().ServerCommandWriter;
-            var localizationFeature = connection.Features.Get<ILocalizationFeature>();
+            var features = _connectionContextAccessor.Context.Features;
+            var serverCommandWriter = features.Get<IServerCommandFeature>().ServerCommandWriter;
+            var localizationFeature = features.Get<ILocalizationFeature>();
 
-            using (CreateConnectionKeepAlive(connection, command.StatisticsInformation))
+            using (CreateConnectionKeepAlive(features, command.StatisticsInformation))
             {
                 // Try to open the data connection
                 IFtpDataConnection dataConnection;
                 try
                 {
-                    dataConnection = await connection.OpenDataConnectionAsync(null, cancellationToken)
+                    var timeout = TimeSpan.FromSeconds(10);
+                    var dataConnectionFeature = features.Get<IFtpDataConnectionFeature>();
+                    var rawDataConnection = await dataConnectionFeature.GetDataConnectionAsync(timeout, cancellationToken)
+                       .ConfigureAwait(false);
+                    dataConnection = await _secureDataConnectionWrapper.WrapAsync(rawDataConnection)
                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -64,8 +74,8 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
                 }
 
                 // Execute the operation on the data connection.
-                var commandResponse = await connection.ExecuteCommand(
-                    command.Command,
+                var context = new FtpContext(command.Command, serverCommandWriter, features);
+                var commandResponse = await context.ExecuteCommand(
                     (_, ct) => command.DataConnectionDelegate(dataConnection, ct),
                     _logger,
                     cancellationToken);
@@ -90,10 +100,10 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
         }
 
         private static IDisposable? CreateConnectionKeepAlive(
-            IFtpConnection connection,
+            IFeatureCollection features,
             FtpFileTransferInformation? information)
         {
-            return information == null ? null : new ConnectionKeepAlive(connection, information);
+            return information == null ? null : new ConnectionKeepAlive(features, information);
         }
 
         private class ConnectionKeepAlive : IDisposable
@@ -102,11 +112,11 @@ namespace FubarDev.FtpServer.ServerCommandHandlers
             private readonly IFtpStatisticsCollectorFeature _collectorFeature;
 
             public ConnectionKeepAlive(
-                IFtpConnection connection,
+                IFeatureCollection features,
                 FtpFileTransferInformation information)
             {
                 _transferId = information.TransferId;
-                _collectorFeature = connection.Features.Get<IFtpStatisticsCollectorFeature>();
+                _collectorFeature = features.Get<IFtpStatisticsCollectorFeature>();
                 _collectorFeature.ForEach(collector => collector.StartFileTransfer(information));
             }
 

@@ -9,6 +9,8 @@ using FubarDev.FtpServer.FileSystem;
 
 using JetBrains.Annotations;
 
+using Microsoft.AspNetCore.Http.Features;
+
 namespace FubarDev.FtpServer.Localization
 {
     /// <summary>
@@ -16,22 +18,22 @@ namespace FubarDev.FtpServer.Localization
     /// </summary>
     public class DefaultFtpServerMessages : IFtpServerMessages
     {
-        private readonly IFtpConnectionAccessor _connectionAccessor;
+        private readonly IFtpConnectionContextAccessor _connectionContextAccessor;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DefaultFtpServerMessages"/> class.
         /// </summary>
-        /// <param name="connectionAccessor">The FTP connection accessor.</param>
+        /// <param name="connectionContextAccessor">The FTP connection context accessor.</param>
         public DefaultFtpServerMessages(
-            IFtpConnectionAccessor connectionAccessor)
+            IFtpConnectionContextAccessor connectionContextAccessor)
         {
-            _connectionAccessor = connectionAccessor;
+            _connectionContextAccessor = connectionContextAccessor;
         }
 
         /// <summary>
         /// Gets the connection this command was created for.
         /// </summary>
-        private IFtpConnection Connection => _connectionAccessor.FtpConnection ?? throw new InvalidOperationException("FTP server message called without active connection.");
+        private IFeatureCollection Features => _connectionContextAccessor.Context?.Features ?? throw new InvalidOperationException("FTP server message called without active connection.");
 
         /// <inheritdoc />
         public IEnumerable<string> GetBannerMessage()
@@ -58,7 +60,7 @@ namespace FubarDev.FtpServer.Localization
         /// <returns>The translated message.</returns>
         private string T(string message)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message);
         }
 
         /// <summary>
@@ -70,7 +72,7 @@ namespace FubarDev.FtpServer.Localization
         [StringFormatMethod("message")]
         private string T(string message, params object[] args)
         {
-            return Connection.Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
+            return Features.Get<ILocalizationFeature>().Catalog.GetString(message, args);
         }
     }
 }
