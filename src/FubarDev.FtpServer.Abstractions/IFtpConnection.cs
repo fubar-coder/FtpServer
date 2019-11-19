@@ -17,6 +17,7 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// The interface for an FTP connection.
     /// </summary>
+    [Obsolete("Use features or the connection context instead.")]
     public interface IFtpConnection : IDisposable
     {
         /// <summary>

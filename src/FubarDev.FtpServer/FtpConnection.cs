@@ -38,7 +38,10 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// This class represents a FTP connection.
     /// </summary>
-    internal sealed class FtpConnection : IFtpConnection
+    internal sealed class FtpConnection
+#pragma warning disable 618
+        : IFtpConnection
+#pragma warning restore 618
     {
         private readonly IServerCommandExecutor _serverCommandExecutor;
 
