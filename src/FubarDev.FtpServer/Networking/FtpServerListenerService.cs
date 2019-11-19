@@ -3,11 +3,11 @@
 // </copyright>
 
 using System;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +21,7 @@ namespace FubarDev.FtpServer.Networking
     /// </remarks>
     internal sealed class FtpServerListenerService : PausableFtpService
     {
-        private readonly ChannelWriter<TcpClient> _newClientWriter;
+        private readonly ChannelWriter<ConnectionContext> _newClientWriter;
         private readonly MultiBindingTcpListener _multiBindingTcpListener;
 
         private readonly CancellationTokenSource _connectionClosedCts;
@@ -31,21 +31,27 @@ namespace FubarDev.FtpServer.Networking
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpServerListenerService"/> class.
         /// </summary>
+        /// <param name="connectionListenerFactory">The connection listener factory.</param>
         /// <param name="newClientWriter">Channel that receives all accepted clients.</param>
         /// <param name="serverOptions">The server options.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="connectionClosedCts">Cancellation token source for a closed connection.</param>
         public FtpServerListenerService(
-            ChannelWriter<TcpClient> newClientWriter,
+            ChannelWriter<ConnectionContext> newClientWriter,
             IOptions<FtpServerOptions> serverOptions,
             CancellationTokenSource connectionClosedCts,
+            IConnectionListenerFactory? connectionListenerFactory = null,
             ILogger? logger = null)
             : base(connectionClosedCts.Token, logger)
         {
             _newClientWriter = newClientWriter;
             _connectionClosedCts = connectionClosedCts;
             var options = serverOptions.Value;
-            _multiBindingTcpListener = new MultiBindingTcpListener(options.ServerAddress, options.Port, logger);
+            _multiBindingTcpListener = new MultiBindingTcpListener(
+                options.ServerAddress,
+                options.Port,
+                connectionListenerFactory,
+                logger);
         }
 
         /// <summary>
@@ -79,7 +85,7 @@ namespace FubarDev.FtpServer.Networking
             }
             finally
             {
-                _multiBindingTcpListener.Stop();
+                await _multiBindingTcpListener.StopAsync().ConfigureAwait(false);
             }
         }
 

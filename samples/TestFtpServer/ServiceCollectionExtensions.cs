@@ -17,6 +17,7 @@ using FubarDev.FtpServer.AccountManagement.Directories.SingleRootWithoutHome;
 using FubarDev.FtpServer.Authentication;
 using FubarDev.FtpServer.CommandExtensions;
 using FubarDev.FtpServer.Commands;
+using FubarDev.FtpServer.ConnectionHandlers;
 using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.FileSystem.DotNet;
 using FubarDev.FtpServer.FileSystem.GoogleDrive;
@@ -30,6 +31,7 @@ using FubarDev.FtpServer.MembershipProvider.Pam.Directories;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Drive.v3;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -232,21 +234,13 @@ namespace TestFtpServer
                 var implicitFtpsCertificate = options.GetCertificate();
                 if (implicitFtpsCertificate != null)
                 {
-                    services
-                       .AddSingleton(new ImplicitFtpsControlConnectionStreamAdapterOptions(implicitFtpsCertificate))
-                       .AddSingleton<IFtpControlStreamAdapter, ImplicitFtpsControlConnectionStreamAdapter>();
-
                     // Ensure that PROT and PBSZ commands are working.
                     services.Decorate<IFtpServer>(
                         (ftpServer, _) =>
                         {
                             ftpServer.ConfigureConnection += (s, e) =>
                             {
-                                var serviceProvider = e.ConnectionContext.Features.Get<IServiceProvidersFeature>().RequestServices;
-                                var stateMachine = serviceProvider.GetRequiredService<IFtpLoginStateMachine>();
-                                var authTlsMechanism = serviceProvider.GetRequiredService<IEnumerable<IAuthenticationMechanism>>()
-                                   .Single(x => x.CanHandle("TLS"));
-                                stateMachine.Activate(authTlsMechanism);
+                                e.AddAsyncInit((connection, ct) => ActivateImplicitTls(connection, ct, implicitFtpsCertificate));
                             };
 
                             return ftpServer;
@@ -281,6 +275,21 @@ namespace TestFtpServer
                    .WithSingletonLifetime());
 
             return services;
+        }
+
+        private static async Task ActivateImplicitTls(
+            ConnectionContext connectionContext,
+            CancellationToken cancellationToken,
+            X509Certificate2 certificate)
+        {
+            var serviceProvider = connectionContext.Features.Get<IServiceProvidersFeature>().RequestServices;
+            var secureConnectionAdapterManager = serviceProvider.GetRequiredService<IFtpSecureConnectionAdapterManager>();
+            await secureConnectionAdapterManager.EnableSslStreamAsync(certificate, cancellationToken)
+               .ConfigureAwait(false);
+            var stateMachine = serviceProvider.GetRequiredService<IFtpLoginStateMachine>();
+            var authTlsMechanism = serviceProvider.GetRequiredService<IEnumerable<IAuthenticationMechanism>>()
+               .Single(x => x.CanHandle("TLS"));
+            stateMachine.Activate(authTlsMechanism);
         }
 
         private static IFtpServerBuilder ConfigureServer(this IFtpServerBuilder builder, FtpOptions options)
@@ -330,41 +339,11 @@ namespace TestFtpServer
             return credential;
         }
 
-        private class ImplicitFtpsControlConnectionStreamAdapterOptions
-        {
-            public ImplicitFtpsControlConnectionStreamAdapterOptions(X509Certificate2 certificate)
-            {
-                Certificate = certificate;
-            }
-
-            public X509Certificate2 Certificate { get; }
-        }
-
         private static TimeSpan? ToTimeSpan(int? seconds)
         {
             return seconds == null
                 ? (TimeSpan?)null
                 : TimeSpan.FromSeconds(seconds.Value);
-        }
-
-        private class ImplicitFtpsControlConnectionStreamAdapter : IFtpControlStreamAdapter
-        {
-            private readonly ImplicitFtpsControlConnectionStreamAdapterOptions _options;
-            private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
-
-            public ImplicitFtpsControlConnectionStreamAdapter(
-                ImplicitFtpsControlConnectionStreamAdapterOptions options,
-                ISslStreamWrapperFactory sslStreamWrapperFactory)
-            {
-                _options = options;
-                _sslStreamWrapperFactory = sslStreamWrapperFactory;
-            }
-
-            /// <inheritdoc />
-            public Task<Stream> WrapAsync(Stream stream, CancellationToken cancellationToken)
-            {
-                return _sslStreamWrapperFactory.WrapStreamAsync(stream, false, _options.Certificate, cancellationToken);
-            }
         }
     }
 }

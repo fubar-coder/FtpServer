@@ -42,7 +42,7 @@ namespace QuickStart.AspNetCoreHost
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
         private readonly ActiveDataConnectionFeatureFactory _activeDataConnectionFeatureFactory;
         private readonly IFtpServerMessages _ftpServerMessages;
-        private readonly ILogger<FtpConnection>? _logger;
+        private readonly ILogger<FtpConnectionHandler>? _logger;
         private readonly PortCommandOptions _portOptions;
         private readonly FtpConnectionOptions _options;
 
@@ -59,7 +59,7 @@ namespace QuickStart.AspNetCoreHost
             ISslStreamWrapperFactory sslStreamWrapperFactory,
             ActiveDataConnectionFeatureFactory activeDataConnectionFeatureFactory,
             IFtpServerMessages ftpServerMessages,
-            ILogger<FtpConnection>? logger = null)
+            ILogger<FtpConnectionHandler>? logger = null)
         {
             _connectionAccessor = connectionAccessor;
             _connectionContextAccessor = connectionContextAccessor;

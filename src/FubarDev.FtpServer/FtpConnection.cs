@@ -11,7 +11,6 @@ using System.IO;
 using System.IO.Pipelines;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Channels;
@@ -39,10 +38,8 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// This class represents a FTP connection.
     /// </summary>
-    public sealed class FtpConnection : IFtpConnection
+    internal sealed class FtpConnection : IFtpConnection
     {
-        private readonly TcpClient _socket;
-
         private readonly IServerCommandExecutor _serverCommandExecutor;
 
         private readonly SecureDataConnectionWrapper _secureDataConnectionWrapper;
@@ -51,10 +48,6 @@ namespace FubarDev.FtpServer
 
         private readonly Channel<IServerCommand> _serverCommandChannel =
             Channel.CreateBounded<IServerCommand>(new BoundedChannelOptions(5));
-
-        private readonly Pipe _socketCommandPipe = new Pipe();
-
-        private readonly Pipe _socketResponsePipe = new Pipe();
 
         private readonly Task _commandReader;
 
@@ -74,23 +67,9 @@ namespace FubarDev.FtpServer
         /// </summary>
         private readonly SemaphoreSlim _stopSemaphore = new SemaphoreSlim(1);
 
-        /// <summary>
-        /// Gets the stream reader service.
-        /// </summary>
-        /// <remarks>
-        /// It writes data from the network stream into a pipe.
-        /// </remarks>
-        private readonly IFtpService _streamReaderService;
-
-        /// <summary>
-        /// Gets the stream writer service.
-        /// </summary>
-        /// <remarks>
-        /// It reads data from the pipe and writes it to the network stream.
-        /// </remarks>
-        private readonly IFtpService _streamWriterService;
-
         private readonly FtpConnectionContext _context;
+
+        private readonly IDisposable _connectionClosedRegistration;
 
         private bool _connectionClosing;
 
@@ -103,7 +82,6 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpConnection"/> class.
         /// </summary>
-        /// <param name="socketAccessor">The accessor to get the socket used to communicate with the client.</param>
         /// <param name="options">The options for the FTP connection.</param>
         /// <param name="portOptions">The <c>PORT</c> command options.</param>
         /// <param name="connectionAccessor">The accessor to get the connection that is active during the <see cref="FtpCommandHandler.Process"/> method execution.</param>
@@ -113,10 +91,9 @@ namespace FubarDev.FtpServer
         /// <param name="serviceProvider">The service provider for the connection.</param>
         /// <param name="secureDataConnectionWrapper">Wraps a data connection into an SSL stream.</param>
         /// <param name="sslStreamWrapperFactory">The SSL stream wrapper factory.</param>
+        /// <param name="connection">The connection.</param>
         /// <param name="logger">The logger for the FTP connection.</param>
-        /// <param name="loggerFactory">The logger factory.</param>
         public FtpConnection(
-            TcpSocketClientAccessor socketAccessor,
             IOptions<FtpConnectionOptions> options,
             IOptions<PortCommandOptions> portOptions,
 #pragma warning disable 618
@@ -128,29 +105,33 @@ namespace FubarDev.FtpServer
             IServiceProvider serviceProvider,
             SecureDataConnectionWrapper secureDataConnectionWrapper,
             ISslStreamWrapperFactory sslStreamWrapperFactory,
-            ILogger<FtpConnection>? logger = null,
-            ILoggerFactory? loggerFactory = null)
+            ConnectionContext connection,
+            ILogger<FtpConnection>? logger = null)
         {
-            var socket = socketAccessor.TcpSocketClient ?? throw new InvalidOperationException("The socket to communicate with the client was not set");
             var defaultEncoding = options.Value.DefaultEncoding ?? Encoding.ASCII;
             var applicationInputPipe = new Pipe();
             var applicationOutputPipe = new Pipe();
-            var socketPipe = new DuplexPipe(_socketCommandPipe.Reader, _socketResponsePipe.Writer);
             var connectionPipe = new DuplexPipe(applicationOutputPipe.Reader, applicationInputPipe.Writer);
             var transport = new DuplexPipe(applicationInputPipe.Reader, applicationOutputPipe.Writer);
-            var remoteEndPoint = (IPEndPoint)socket.Client.RemoteEndPoint;
+            var remoteEndPoint = (IPEndPoint)connection.RemoteEndPoint;
 
             _context = new FtpConnectionContext(
                 catalogLoader,
                 defaultEncoding,
                 _serverCommandChannel.Writer,
-                socketPipe,
+                connection.Transport,
                 connectionPipe,
                 sslStreamWrapperFactory,
                 transport,
-                socket.Client.LocalEndPoint,
+                connection.LocalEndPoint,
                 remoteEndPoint,
                 serviceProvider);
+
+            var tcpClientFeature = connection.Features.Get<ITcpClientFeature?>();
+            if (tcpClientFeature?.TcpClient != null)
+            {
+                connection.Features.Set(tcpClientFeature);
+            }
 
 #pragma warning disable 618
             connectionAccessor.FtpConnection = this;
@@ -165,26 +146,14 @@ namespace FubarDev.FtpServer
                 ["ConnectionId"] = _context.ConnectionId,
             };
 
-            _socket = socket;
             _loggerScope = logger?.BeginScope(properties);
 
             _dataPort = portOptions.Value.DataPort;
             _serverCommandExecutor = serverCommandExecutor;
             _secureDataConnectionWrapper = secureDataConnectionWrapper;
+            _connectionClosedRegistration = connection.ConnectionClosed.Register(() => _context.Abort());
 
             _logger = logger;
-
-            var originalStream = socketAccessor.TcpSocketStream ?? _socket.GetStream();
-            _streamReaderService = new ConnectionClosingNetworkStreamReader(
-                originalStream,
-                _socketCommandPipe.Writer,
-                _context,
-                loggerFactory?.CreateLogger($"{nameof(StreamPipeReaderService)}:Socket:Receive"));
-            _streamWriterService = new StreamPipeWriterService(
-                originalStream,
-                _socketResponsePipe.Reader,
-                _context.ConnectionClosed,
-                loggerFactory?.CreateLogger($"{nameof(StreamPipeWriterService)}:Socket:Transmit"));
 
             _commandReader = ReadCommandsFromPipeline(
                 _ftpCommandChannel.Writer,
@@ -236,10 +205,6 @@ namespace FubarDev.FtpServer
                 var connectionFeature = Features.Get<IConnectionEndPointFeature>();
                 _logger?.LogInformation("Connected from {remoteIp}", connectionFeature.RemoteEndPoint);
 
-                await _streamWriterService.StartAsync(CancellationToken.None)
-                   .ConfigureAwait(false);
-                await _streamReaderService.StartAsync(CancellationToken.None)
-                   .ConfigureAwait(false);
                 await _context.SecureConnectionAdapterManager.StartAsync(CancellationToken.None)
                    .ConfigureAwait(false);
 
@@ -297,10 +262,6 @@ namespace FubarDev.FtpServer
 
                         await _context.SecureConnectionAdapterManager.StopAsync(CancellationToken.None)
                            .ConfigureAwait(false);
-                        await _streamReaderService.StopAsync(CancellationToken.None)
-                           .ConfigureAwait(false);
-                        await _streamWriterService.StopAsync(CancellationToken.None)
-                           .ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -344,7 +305,7 @@ namespace FubarDev.FtpServer
                 Abort();
             }
 
-            _socket.Dispose();
+            _connectionClosedRegistration.Dispose();
             _context.Dispose();
             _loggerScope?.Dispose();
         }

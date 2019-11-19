@@ -5,8 +5,9 @@
 using System;
 using System.Net.Sockets;
 
+using FubarDev.FtpServer.Features;
+
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace FubarDev.FtpServer.ConnectionChecks
 {
@@ -26,8 +27,7 @@ namespace FubarDev.FtpServer.ConnectionChecks
         {
             try
             {
-                var socketAccessor = features.GetServiceProvider().GetRequiredService<TcpSocketClientAccessor>();
-                var client = socketAccessor?.TcpSocketClient;
+                var client = features.Get<ITcpClientFeature?>()?.TcpClient;
                 if (client == null)
                 {
                     return false;

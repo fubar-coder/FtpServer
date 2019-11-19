@@ -10,6 +10,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer
@@ -17,23 +18,26 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// Allows binding to a host name, which in turn may resolve to multiple IP addresses.
     /// </summary>
-    public class MultiBindingTcpListener
+    internal class MultiBindingTcpListener
     {
+        private readonly IConnectionListenerFactory _connectionListenerFactory;
         private readonly string? _address;
         private readonly int _port;
         private readonly ILogger? _logger;
         private Task<AcceptInfo>[] _acceptors = Array.Empty<Task<AcceptInfo>>();
-        private TcpListener[] _listeners = Array.Empty<TcpListener>();
+        private IConnectionListener[] _listeners = Array.Empty<IConnectionListener>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MultiBindingTcpListener"/> class.
         /// </summary>
         /// <param name="address">The address/host name to bind to.</param>
         /// <param name="port">The listener port.</param>
+        /// <param name="connectionListenerFactory">The connection listener factory.</param>
         /// <param name="logger">The logger.</param>
         public MultiBindingTcpListener(
             string? address,
             int port,
+            IConnectionListenerFactory? connectionListenerFactory = null,
             ILogger? logger = null)
         {
             if (port < 0 || port > 65535)
@@ -41,6 +45,7 @@ namespace FubarDev.FtpServer
                 throw new ArgumentOutOfRangeException(nameof(port), "The port argument is out of range");
             }
 
+            _connectionListenerFactory = connectionListenerFactory ?? new TcpListenerConnectionListenerFactory();
             _address = address;
             Port = _port = port;
             _logger = logger;
@@ -85,11 +90,11 @@ namespace FubarDev.FtpServer
 
             try
             {
-                Port = StartListening(addresses, _port);
+                Port = await StartListeningAsync(addresses, _port).ConfigureAwait(false);
             }
             catch
             {
-                Stop();
+                await StopAsync().ConfigureAwait(false);
                 throw;
             }
         }
@@ -97,14 +102,15 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Stops all listeners.
         /// </summary>
-        public void Stop()
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task StopAsync()
         {
             foreach (var listener in _listeners)
             {
-                listener.Stop();
+                await listener.UnbindAsync().ConfigureAwait(false);
             }
 
-            _listeners = Array.Empty<TcpListener>();
+            _listeners = Array.Empty<IConnectionListener>();
             _acceptors = Array.Empty<Task<AcceptInfo>>();
             Port = 0;
             _logger?.LogInformation("Listener stopped");
@@ -115,47 +121,52 @@ namespace FubarDev.FtpServer
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The new TCP client.</returns>
-        public async Task<TcpClient> WaitAnyTcpClientAsync(CancellationToken token)
+        public async Task<ConnectionContext> WaitAnyTcpClientAsync(CancellationToken token)
         {
             // The task that just waits indefinitely for a triggered cancellation token
-            var cancellationTask = Task.Delay(-1, token);
+            var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             // Build the list of awaitable tasks
             var tasks = new Task[_acceptors.Length + 1];
             Array.Copy(_acceptors, tasks, _acceptors.Length);
 
             // Add the cancellation task as last task
-            tasks[_acceptors.Length] = cancellationTask;
+            tasks[_acceptors.Length] = tcs.Task;
 
-            TcpClient? result;
-            do
+            ConnectionContext? result;
+            using (token.Register(
+                state => { ((TaskCompletionSource<object?>)state!).TrySetResult(null); },
+                tcs))
             {
-                // Wait for any task to be finished
-                var retVal = await Task.WhenAny(tasks).ConfigureAwait(false);
+                do
+                {
+                    // Wait for any task to be finished
+                    var retVal = await Task.WhenAny(tasks).ConfigureAwait(false);
 
-                // Test if the cancellation token was triggered
-                token.ThrowIfCancellationRequested();
+                    // Test if the cancellation token was triggered
+                    token.ThrowIfCancellationRequested();
 
-                // It was a listener task when the cancellation token was not triggered
-                var acceptInfo = ((Task<AcceptInfo>)retVal).Result;
-                retVal.Dispose();
+                    // It was a listener task when the cancellation token was not triggered
+                    var acceptInfo = ((Task<AcceptInfo>)retVal).Result;
+                    retVal.Dispose();
 
-                // Avoid indexed access into the list of acceptors
-                var index = acceptInfo.Index;
+                    // Avoid indexed access into the list of acceptors
+                    var index = acceptInfo.Index;
 
-                // Gets the result of the finished task.
-                result = acceptInfo.Client;
+                    // Gets the result of the finished task.
+                    result = acceptInfo.Connection;
 
-                // Start accepting the next TCP client for the
-                // listener whose task was finished.
-                var listener = _listeners[index];
-                var newAcceptor = AcceptForListenerAsync(listener, index);
+                    // Start accepting the next TCP client for the
+                    // listener whose task was finished.
+                    var listener = _listeners[index];
+                    var newAcceptor = AcceptForListenerAsync(listener, index);
 
-                // Start accepting the next TCP client for the
-                // listener whose task was finished.
-                tasks[index] = _acceptors[index] = newAcceptor;
+                    // Start accepting the next TCP client for the
+                    // listener whose task was finished.
+                    tasks[index] = _acceptors[index] = newAcceptor;
+                }
+                while (result == null);
             }
-            while (result == null);
 
             return result;
         }
@@ -168,11 +179,11 @@ namespace FubarDev.FtpServer
             _acceptors = _listeners.Select(AcceptForListenerAsync).ToArray();
         }
 
-        private async Task<AcceptInfo> AcceptForListenerAsync(TcpListener listener, int index)
+        private async Task<AcceptInfo> AcceptForListenerAsync(IConnectionListener listener, int index)
         {
             try
             {
-                var client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                var client = await listener.AcceptAsync().ConfigureAwait(false);
                 return new AcceptInfo(client, index);
             }
             catch (ObjectDisposedException)
@@ -182,19 +193,19 @@ namespace FubarDev.FtpServer
             }
         }
 
-        private int StartListening(IEnumerable<IPAddress> addresses, int port)
+        private async Task<int> StartListeningAsync(IEnumerable<IPAddress> addresses, int port)
         {
             var selectedPort = port;
 
-            var listeners = new List<TcpListener>();
+            var listeners = new List<IConnectionListener>();
             foreach (var address in addresses)
             {
-                var listener = new TcpListener(address, selectedPort);
-                listener.Start();
-
+                var endPoint = new IPEndPoint(address, selectedPort);
+                var listener = await _connectionListenerFactory.BindAsync(endPoint, CancellationToken.None)
+                   .ConfigureAwait(false);
                 if (selectedPort == 0)
                 {
-                    selectedPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+                    selectedPort = ((IPEndPoint)listener.EndPoint).Port;
                 }
 
                 _logger?.LogInformation("Started listening on {address}:{port}", address, selectedPort);
@@ -209,13 +220,13 @@ namespace FubarDev.FtpServer
 
         private struct AcceptInfo
         {
-            public AcceptInfo(TcpClient? client, int index)
+            public AcceptInfo(ConnectionContext? connection, int index)
             {
-                Client = client;
+                Connection = connection;
                 Index = index;
             }
 
-            public TcpClient? Client { get; }
+            public ConnectionContext? Connection { get; }
             public int Index { get; }
         }
     }

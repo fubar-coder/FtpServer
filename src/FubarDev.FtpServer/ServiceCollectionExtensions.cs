@@ -19,6 +19,7 @@ using FubarDev.FtpServer.Localization;
 using FubarDev.FtpServer.ServerCommandHandlers;
 using FubarDev.FtpServer.ServerCommands;
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
@@ -71,9 +72,6 @@ namespace Microsoft.Extensions.DependencyInjection
 
             // Feature provider
             services.AddScoped<IFeatureInfoProvider, DefaultFeatureInfoProvider>();
-
-            services.AddScoped<TcpSocketClientAccessor>();
-            services.AddScoped(sp => sp.GetRequiredService<TcpSocketClientAccessor>().TcpSocketClient);
 
             services.AddScoped<IFtpLoginStateMachine, FtpLoginStateMachine>();
             services.AddScoped<IFtpCommandDispatcher, DefaultFtpCommandDispatcher>();

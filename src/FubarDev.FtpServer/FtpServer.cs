@@ -8,9 +8,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -37,7 +35,6 @@ namespace FubarDev.FtpServer
     {
         private readonly FtpServerStatistics _statistics = new FtpServerStatistics();
         private readonly IServiceProvider _serviceProvider;
-        private readonly List<IFtpControlStreamAdapter> _controlStreamAdapters;
         private readonly ConcurrentDictionary<FtpConnection, FtpConnectionInfo> _connections = new ConcurrentDictionary<FtpConnection, FtpConnectionInfo>();
         private readonly FtpServerListenerService _serverListener;
         private readonly ILogger<FtpServer>? _log;
@@ -52,23 +49,27 @@ namespace FubarDev.FtpServer
         /// </summary>
         /// <param name="serverOptions">The server options.</param>
         /// <param name="serviceProvider">The service provider used to query services.</param>
-        /// <param name="controlStreamAdapters">Adapters for the control connection stream.</param>
+        /// <param name="connectionListenerFactory">The connection listener factory.</param>
         /// <param name="logger">The FTP server logger.</param>
         public FtpServer(
             IOptions<FtpServerOptions> serverOptions,
             IServiceProvider serviceProvider,
-            IEnumerable<IFtpControlStreamAdapter> controlStreamAdapters,
+            IConnectionListenerFactory? connectionListenerFactory = null,
             ILogger<FtpServer>? logger = null)
         {
             _serviceProvider = serviceProvider;
-            _controlStreamAdapters = controlStreamAdapters.ToList();
             _log = logger;
             ServerAddress = serverOptions.Value.ServerAddress;
             Port = serverOptions.Value.Port;
             MaxActiveConnections = serverOptions.Value.MaxActiveConnections;
 
-            var tcpClientChannel = Channel.CreateBounded<TcpClient>(5);
-            _serverListener = new FtpServerListenerService(tcpClientChannel, serverOptions, _serverShutdown, logger);
+            var tcpClientChannel = Channel.CreateBounded<ConnectionContext>(5);
+            _serverListener = new FtpServerListenerService(
+                tcpClientChannel,
+                serverOptions,
+                _serverShutdown,
+                connectionListenerFactory,
+                logger);
             _serverListener.ListenerStarted += (s, e) =>
             {
                 Port = e.Port;
@@ -211,7 +212,7 @@ namespace FubarDev.FtpServer
         }
 
         private async Task ReadClientsAsync(
-            ChannelReader<TcpClient> tcpClientReader,
+            ChannelReader<ConnectionContext> tcpClientReader,
             CancellationToken cancellationToken)
         {
             try
@@ -298,25 +299,13 @@ namespace FubarDev.FtpServer
             }
         }
 
-        private async Task AddClientAsync(TcpClient client)
+        private async Task AddClientAsync(ConnectionContext client)
         {
             var scope = _serviceProvider.CreateScope();
             try
             {
-                Stream socketStream = client.GetStream();
-                foreach (var controlStreamAdapter in _controlStreamAdapters)
-                {
-                    socketStream = await controlStreamAdapter.WrapAsync(socketStream, CancellationToken.None)
-                       .ConfigureAwait(false);
-                }
-
-                // Initialize information about the socket
-                var socketAccessor = scope.ServiceProvider.GetRequiredService<TcpSocketClientAccessor>();
-                socketAccessor.TcpSocketClient = client;
-                socketAccessor.TcpSocketStream = socketStream;
-
                 // Create the connection
-                var connection = ActivatorUtilities.CreateInstance<FtpConnection>(scope.ServiceProvider);
+                var connection = ActivatorUtilities.CreateInstance<FtpConnection>(scope.ServiceProvider, client);
 
                 // Get access to the connection lifetime
                 var lifetimeFeature = connection.Features.Get<IConnectionLifetimeFeature>();
@@ -333,13 +322,13 @@ namespace FubarDev.FtpServer
                    .ToList();
 
                 // Create connection information
-                var connectionInfo = new FtpConnectionInfo(scope, stopRegistration, statCollRegistrations);
+                var connectionInfo = new FtpConnectionInfo(scope, client, stopRegistration, statCollRegistrations);
 
                 // Remember connection
                 if (!_connections.TryAdd(connection, connectionInfo))
                 {
                     _log.LogCritical("A new scope was created, but the connection couldn't be added to the list.");
-                    client.Dispose();
+                    await client.DisposeAsync().ConfigureAwait(false);
                     scope.Dispose();
                     return;
                 }
@@ -419,6 +408,7 @@ namespace FubarDev.FtpServer
 
             info.Registration.Dispose();
             info.Scope.Dispose();
+            await info.Client.DisposeAsync().ConfigureAwait(false);
 
             _statistics.CloseConnection();
         }
@@ -432,15 +422,18 @@ namespace FubarDev.FtpServer
         {
             public FtpConnectionInfo(
                 IServiceScope scope,
+                ConnectionContext client,
                 CancellationTokenRegistration registration,
                 IReadOnlyCollection<IDisposable> statisticsRegistrations)
             {
                 Scope = scope;
+                Client = client;
                 Registration = registration;
                 StatisticsRegistrations = statisticsRegistrations;
             }
 
             public IServiceScope Scope { get; }
+            public ConnectionContext Client { get; }
             public CancellationTokenRegistration Registration { get; }
             public IReadOnlyCollection<IDisposable> StatisticsRegistrations { get; }
         }
