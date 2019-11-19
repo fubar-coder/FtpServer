@@ -147,9 +147,6 @@ namespace TestFtpServer
         {
             var ftpConnection = ((FtpServer)_ftpServer)
                .GetConnections()
-               .Select(x => x.Features.Get<IServiceProvidersFeature>())
-               .Select(x => x.RequestServices.GetRequiredService<IFtpConnectionContextAccessor>())
-               .Select(x => x.Context)
                .SingleOrDefault(x => IsConnectionWithId(x, connectionId));
             if (ftpConnection == null)
             {
