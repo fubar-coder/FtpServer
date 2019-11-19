@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Authentication;
 
+using Microsoft.Extensions.Logging;
+
 namespace FubarDev.FtpServer.ConnectionHandlers
 {
     /// <summary>
@@ -29,11 +31,13 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         /// <param name="connectionPipe">The pipe to the connection object.</param>
         /// <param name="sslStreamWrapperFactory">The SSL stream wrapper factory.</param>
         /// <param name="connectionClosed">The cancellation token for a closed connection.</param>
+        /// <param name="loggerFactory">The logger factory.</param>
         public SecureConnectionAdapterManager(
             IDuplexPipe socketPipe,
             IDuplexPipe connectionPipe,
             ISslStreamWrapperFactory sslStreamWrapperFactory,
-            CancellationToken connectionClosed)
+            CancellationToken connectionClosed,
+            ILoggerFactory? loggerFactory = null)
         {
             _socketPipe = socketPipe;
             _connectionPipe = connectionPipe;
@@ -42,7 +46,8 @@ namespace FubarDev.FtpServer.ConnectionHandlers
             _activeCommunicationService = new PassThroughConnectionAdapter(
                 socketPipe,
                 connectionPipe,
-                connectionClosed);
+                connectionClosed,
+                loggerFactory);
         }
 
         /// <inheritdoc />

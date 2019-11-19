@@ -15,7 +15,7 @@ namespace FubarDev.FtpServer.Networking
     /// <summary>
     /// Reads from a stream and writes into a pipeline.
     /// </summary>
-    internal class StreamPipeReaderService : PausableFtpService
+    public class StreamPipeReaderService : PausableFtpService
     {
         private readonly PipeWriter _pipeWriter;
 

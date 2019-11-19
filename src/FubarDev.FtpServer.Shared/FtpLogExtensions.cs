@@ -1,9 +1,6 @@
-//-----------------------------------------------------------------------
 // <copyright file="FtpLogExtensions.cs" company="Fubar Development Junker">
-//     Copyright (c) Fubar Development Junker. All rights reserved.
+// Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
-// <author>Mark Junker</author>
-//-----------------------------------------------------------------------
 
 using Microsoft.Extensions.Logging;
 

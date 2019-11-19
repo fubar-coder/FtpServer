@@ -6,8 +6,12 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FubarDev.FtpServer.DataConnection;
+using FubarDev.FtpServer.Features;
+
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.DependencyInjection;
 
 #pragma warning disable CS0067
 namespace FubarDev.FtpServer.Compatibility
@@ -57,9 +61,15 @@ namespace FubarDev.FtpServer.Compatibility
         }
 
         /// <inheritdoc />
-        public Task<IFtpDataConnection> OpenDataConnectionAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        public async Task<IFtpDataConnection> OpenDataConnectionAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            var serviceProvider = Features.GetServiceProvider();
+            var secureDataConnectionWrapper = serviceProvider.GetRequiredService<SecureDataConnectionWrapper>();
+            var dataConnectionFeature = Features.Get<IFtpDataConnectionFeature>();
+            var dataConnection = await dataConnectionFeature.GetDataConnectionAsync(timeout ?? TimeSpan.FromSeconds(10), cancellationToken)
+               .ConfigureAwait(false);
+            return await secureDataConnectionWrapper.WrapAsync(dataConnection)
+               .ConfigureAwait(false);
         }
     }
 }

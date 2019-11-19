@@ -179,7 +179,7 @@ namespace FubarDev.FtpServer
                 originalStream,
                 _socketCommandPipe.Writer,
                 _context,
-                loggerFactory?.CreateLogger($"{nameof(StreamPipeWriterService)}:Socket:Receive"));
+                loggerFactory?.CreateLogger($"{nameof(StreamPipeReaderService)}:Socket:Receive"));
             _streamWriterService = new StreamPipeWriterService(
                 originalStream,
                 _socketResponsePipe.Reader,

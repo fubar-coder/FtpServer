@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.BackgroundTransfer
 {
-    internal class BackgroundTransferWorker : IBackgroundTransferWorker, IFtpService, IDisposable
+    public class BackgroundTransferWorker : IBackgroundTransferWorker, IFtpService, IDisposable
     {
         private readonly ILogger? _log;
         private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();

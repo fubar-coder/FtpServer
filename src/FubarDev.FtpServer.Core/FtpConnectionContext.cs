@@ -27,6 +27,8 @@ using FubarDev.FtpServer.Statistics;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 using NGettext;
 
@@ -130,7 +132,8 @@ namespace FubarDev.FtpServer
                 socketPipe,
                 connectionPipe,
                 sslStreamWrapperFactory,
-                _connectionClosedTokenSource.Token);
+                _connectionClosedTokenSource.Token,
+                requestServices.GetService<ILoggerFactory>());
             Transport = transport;
             LocalEndPoint = localEndPoint;
             RemoteEndPoint = remoteEndPoint;

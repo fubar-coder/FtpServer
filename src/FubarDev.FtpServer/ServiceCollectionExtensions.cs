@@ -107,7 +107,7 @@ namespace Microsoft.Extensions.DependencyInjection
                    .AddClasses(filter => filter.AssignableTo<IAuthenticationMechanism>()).As<IAuthenticationMechanism>().WithScopedLifetime());
 
             services
-               .AddScoped<IServerCommandExecutor, ReflectionServerCommandExecutor>();
+               .AddSingleton<IServerCommandExecutor, ReflectionServerCommandExecutor>();
 
             services
                .AddScoped<IServerCommandHandler<SendResponseServerCommand>, SendResponseServerCommandHandler>()
