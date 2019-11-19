@@ -45,10 +45,24 @@ namespace TestFtpServer.Shell.Commands
             => AsyncEnumerable.Empty<ICommandInfo>();
 
         /// <inheritdoc />
-        public Task ExecuteAsync(CancellationToken cancellationToken)
+        public async Task ExecuteAsync(CancellationToken cancellationToken)
         {
-            _status.Closed = true;
-            return _client.InvokeAsync(host => host.StopAsync(), cancellationToken);
+            try
+            {
+                await _client.InvokeAsync(host => host.StopAsync(), cancellationToken)
+                   .ConfigureAwait(false);
+                _status.Closed = true;
+            }
+            catch (TimeoutException)
+            {
+                // Show timeouts
+                throw;
+            }
+            catch
+            {
+                // Ignore errors and just assume that everything is fine...
+                _status.Closed = true;
+            }
         }
     }
 }
