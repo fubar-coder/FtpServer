@@ -51,6 +51,7 @@ namespace FubarDev.FtpServer
         /// <summary>
         /// Gets the FTP server statistics.
         /// </summary>
+        [Obsolete("Use dependency injection to get the IFtpServerStatistics")]
         IFtpServerStatistics Statistics { get; }
     }
 }

@@ -19,9 +19,10 @@ using FubarDev.FtpServer.Localization;
 using FubarDev.FtpServer.ServerCommandHandlers;
 using FubarDev.FtpServer.ServerCommands;
 
-using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+
+using QuickStart.AspNetCoreHost;
 
 // ReSharper disable once CheckNamespace
 namespace Microsoft.Extensions.DependencyInjection
@@ -29,7 +30,7 @@ namespace Microsoft.Extensions.DependencyInjection
     /// <summary>
     /// Extension methods for <see cref="IServiceCollection"/>.
     /// </summary>
-    public static class ServiceCollectionExtensions
+    internal static class ServiceCollectionExtensions
     {
         /// <summary>
         /// Adds the FTP server services to the collection.
@@ -43,7 +44,6 @@ namespace Microsoft.Extensions.DependencyInjection
         {
             services.AddOptions();
 
-            services.AddSingleton<IFtpServer, FtpServer>();
             services.AddSingleton<ITemporaryDataFactory, TemporaryDataFactory>();
             services.AddSingleton<IPasvListenerFactory, PasvListenerFactory>();
             services.AddSingleton<IPasvAddressResolver, SimplePasvAddressResolver>();
@@ -87,11 +87,6 @@ namespace Microsoft.Extensions.DependencyInjection
 
             services.AddSingleton<IBackgroundTransferWorker, BackgroundTransferWorker>();
 
-            services.AddSingleton(sp => (IFtpService)sp.GetRequiredService<IFtpServer>());
-            services.AddSingleton(sp => (IFtpService)sp.GetRequiredService<IBackgroundTransferWorker>());
-
-            services.AddSingleton<IFtpServerHost, FtpServerHost>();
-
             services.AddSingleton<ISslStreamWrapperFactory, DefaultSslStreamWrapperFactory>();
 
             services.TryAddSingleton<IAccountDirectoryQuery, SingleRootWithoutHomeAccountDirectoryQuery>();
@@ -128,24 +123,12 @@ namespace Microsoft.Extensions.DependencyInjection
             services
                .AddSingleton<IFtpDataConnectionValidator, PromiscuousPasvDataConnectionValidator>();
 
-            configure(new FtpServerBuilder(services).EnableDefaultChecks());
+            services
+               .AddHostedService<BackgroundTransferService>();
+
+            configure(new FtpServerBuilder(services));
 
             return services;
-        }
-
-        private class FtpServerBuilder : IFtpServerBuilder
-        {
-            /// <summary>
-            /// Initializes a new instance of the <see cref="FtpServerBuilder"/> class.
-            /// </summary>
-            /// <param name="services">The service collection.</param>
-            public FtpServerBuilder(IServiceCollection services)
-            {
-                Services = services;
-            }
-
-            /// <inheritdoc />
-            public IServiceCollection Services { get; }
         }
     }
 }

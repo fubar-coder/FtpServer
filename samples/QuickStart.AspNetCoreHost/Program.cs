@@ -5,15 +5,9 @@
 // <author>Mark Junker</author>
 //-----------------------------------------------------------------------
 
-using System.Threading;
-using System.Threading.Tasks;
-
 using FubarDev.FtpServer;
 
-using Microsoft.AspNetCore;
-using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace QuickStart.AspNetCoreHost
@@ -25,24 +19,19 @@ namespace QuickStart.AspNetCoreHost
             CreateWebHostBuilder(args).Build().Run();
         }
 
-        public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
-            WebHost.CreateDefaultBuilder(args)
-               .ConfigureServices(
-                    services =>
+        public static IHostBuilder CreateWebHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+               .ConfigureWebHostDefaults(
+                    webBuilder =>
                     {
-                        services
-                           .AddFtpServer(
-                                builder => builder
+                        webBuilder
+                           .ConfigureKestrel(opt => opt.ListenLocalhost(5000))
+                           .UseFtpServer(
+                                opt => opt
+                                   .ListenLocalhost(21)
                                    .UseDotNetFileSystem()
-                                   .EnableAnonymousAuthentication());
-                    })
-               .ConfigureKestrel(
-                    opt =>
-                    {
-                        opt.ListenAnyIP(
-                            21,
-                            lo => { lo.UseConnectionHandler<FtpConnectionHandler>(); });
-                    })
-               .UseStartup<Startup>();
+                                   .EnableAnonymousAuthentication())
+                           .UseStartup<Startup>();
+                    });
     }
 }

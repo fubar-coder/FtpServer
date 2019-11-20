@@ -33,8 +33,8 @@ namespace FubarDev.FtpServer
     /// </summary>
     public sealed class FtpServer : IFtpServer, IDisposable
     {
-        private readonly FtpServerStatistics _statistics = new FtpServerStatistics();
         private readonly IServiceProvider _serviceProvider;
+        private readonly FtpServerStatisticsCollector _statisticsCollector;
         private readonly ConcurrentDictionary<FtpConnection, FtpConnectionInfo> _connections = new ConcurrentDictionary<FtpConnection, FtpConnectionInfo>();
         private readonly FtpServerListenerService _serverListener;
         private readonly ILogger<FtpServer>? _log;
@@ -58,6 +58,7 @@ namespace FubarDev.FtpServer
             ILogger<FtpServer>? logger = null)
         {
             _serviceProvider = serviceProvider;
+            _statisticsCollector = serviceProvider.GetRequiredService<FtpServerStatisticsCollector>();
             _log = logger;
             ServerAddress = serverOptions.Value.ServerAddress;
             Port = serverOptions.Value.Port;
@@ -96,7 +97,7 @@ namespace FubarDev.FtpServer
         public event EventHandler<ListenerStartedEventArgs>? ListenerStarted;
 
         /// <inheritdoc />
-        public IFtpServerStatistics Statistics => _statistics;
+        public IFtpServerStatistics Statistics => _statisticsCollector.GetStatistics();
 
         /// <inheritdoc />
         public string? ServerAddress { get; }
@@ -336,8 +337,9 @@ namespace FubarDev.FtpServer
                 // Send initial message
                 var serverCommandWriter = connection.Features.Get<IServerCommandFeature>().ServerCommandWriter;
 
+                var statistics = _statisticsCollector.GetStatistics();
                 var blockConnection = MaxActiveConnections != 0
-                    && _statistics.ActiveConnections >= MaxActiveConnections;
+                    && statistics.ActiveConnections >= MaxActiveConnections;
                 if (blockConnection)
                 {
                     // Send response
@@ -362,7 +364,7 @@ namespace FubarDev.FtpServer
                 }
 
                 // Statistics
-                _statistics.AddConnection();
+                _statisticsCollector.AddConnection();
 
                 // Connection configuration by host
                 var connectionContext = scope.ServiceProvider
@@ -401,6 +403,8 @@ namespace FubarDev.FtpServer
 
             await connection.StopAsync().ConfigureAwait(false);
 
+            _statisticsCollector.CloseConnection();
+
             foreach (var registration in info.StatisticsRegistrations)
             {
                 registration.Dispose();
@@ -409,8 +413,6 @@ namespace FubarDev.FtpServer
             info.Registration.Dispose();
             info.Scope.Dispose();
             await info.Client.DisposeAsync().ConfigureAwait(false);
-
-            _statistics.CloseConnection();
         }
 
         private void OnListenerStarted(ListenerStartedEventArgs e)

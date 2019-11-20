@@ -30,7 +30,7 @@ using Microsoft.Extensions.Options;
 
 namespace QuickStart.AspNetCoreHost
 {
-    public class FtpConnectionHandler : ConnectionHandler
+    internal class FtpConnectionHandler : ConnectionHandler
     {
 #pragma warning disable 618
         private readonly IFtpConnectionAccessor _connectionAccessor;
@@ -42,13 +42,16 @@ namespace QuickStart.AspNetCoreHost
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
         private readonly ActiveDataConnectionFeatureFactory _activeDataConnectionFeatureFactory;
         private readonly IFtpServerMessages _ftpServerMessages;
+        private readonly FtpServerStatisticsCollector _statisticsCollector;
         private readonly ILogger<FtpConnectionHandler>? _logger;
         private readonly PortCommandOptions _portOptions;
         private readonly FtpConnectionOptions _options;
+        private readonly int _maxActiveConnections;
 
         public FtpConnectionHandler(
             IOptions<FtpConnectionOptions> options,
             IOptions<PortCommandOptions> portOptions,
+            IOptions<FtpServerOptions> serverOptions,
 #pragma warning disable 618
             IFtpConnectionAccessor connectionAccessor,
 #pragma warning restore 618
@@ -59,8 +62,10 @@ namespace QuickStart.AspNetCoreHost
             ISslStreamWrapperFactory sslStreamWrapperFactory,
             ActiveDataConnectionFeatureFactory activeDataConnectionFeatureFactory,
             IFtpServerMessages ftpServerMessages,
+            FtpServerStatisticsCollector statisticsCollector,
             ILogger<FtpConnectionHandler>? logger = null)
         {
+            _maxActiveConnections = serverOptions.Value.MaxActiveConnections;
             _connectionAccessor = connectionAccessor;
             _connectionContextAccessor = connectionContextAccessor;
             _catalogLoader = catalogLoader;
@@ -69,6 +74,7 @@ namespace QuickStart.AspNetCoreHost
             _sslStreamWrapperFactory = sslStreamWrapperFactory;
             _activeDataConnectionFeatureFactory = activeDataConnectionFeatureFactory;
             _ftpServerMessages = ftpServerMessages;
+            _statisticsCollector = statisticsCollector;
             _logger = logger;
             _portOptions = portOptions.Value;
             _options = options.Value;
@@ -139,26 +145,53 @@ namespace QuickStart.AspNetCoreHost
             var commandChannelReader = CommandChannelDispatcherAsync(context, ftpCommandChannel.Reader);
             var serverCommandHandler = SendResponsesAsync(context, serverCommandChannel.Reader);
 
-            var response = new FtpResponseTextBlock(220, _ftpServerMessages.GetBannerMessage());
+            var serverCommandWriter = serverCommandChannel.Writer;
 
-            // Send initial response
-            await serverCommandChannel.Writer.WriteAsync(
-                    new SendResponseServerCommand(response),
-                    context.ConnectionClosed)
-               .ConfigureAwait(false);
+            // Check the maximum number of connections
+            var statistics = _statisticsCollector.GetStatistics();
+            var blockConnection = _maxActiveConnections != 0
+                                  && statistics.ActiveConnections >= _maxActiveConnections;
+            if (blockConnection)
+            {
+                // Send response
+                var response = new FtpResponse(421, "Too many users, server is full.");
+                await serverCommandWriter.WriteAsync(new SendResponseServerCommand(response))
+                   .ConfigureAwait(false);
 
-            await commandReader.ConfigureAwait(false);
-            serverCommandChannel.Writer.Complete();
+                // Send close
+                await serverCommandWriter.WriteAsync(new CloseConnectionServerCommand())
+                   .ConfigureAwait(false);
+            }
+            else
+            {
+                // Send initial response
+                var initialResponse = new FtpResponseTextBlock(220, _ftpServerMessages.GetBannerMessage());
+                await serverCommandWriter.WriteAsync(
+                        new SendResponseServerCommand(initialResponse),
+                        context.ConnectionClosed)
+                   .ConfigureAwait(false);
+            }
 
-            await commandChannelReader.ConfigureAwait(false);
-            await serverCommandHandler.ConfigureAwait(false);
-            await context.SecureConnectionAdapterManager.StopAsync(CancellationToken.None)
-               .ConfigureAwait(false);
+            // Wait for the connection to be closed.
+            _statisticsCollector.AddConnection();
+            try
+            {
+                await commandReader.ConfigureAwait(false);
+                serverCommandWriter.Complete();
 
-            // Dispose all features (if disposable)
-            await context.Features.ResetAsync(CancellationToken.None, _logger).ConfigureAwait(false);
+                await commandChannelReader.ConfigureAwait(false);
+                await serverCommandHandler.ConfigureAwait(false);
+                await context.SecureConnectionAdapterManager.StopAsync(CancellationToken.None)
+                   .ConfigureAwait(false);
 
-            _logger?.LogInformation("Connection closed");
+                // Dispose all features (if disposable)
+                await context.Features.ResetAsync(CancellationToken.None, _logger).ConfigureAwait(false);
+            }
+            finally
+            {
+                _statisticsCollector.CloseConnection();
+                _logger?.LogInformation("Connection closed");
+            }
         }
 
         /// <summary>
@@ -323,7 +356,6 @@ namespace QuickStart.AspNetCoreHost
         {
             var cancellationToken = connectionContext.ConnectionClosed;
             var ftpCommandDispatcher = connectionContext.RequestServices.GetRequiredService<IFtpCommandDispatcher>();
-
 
             // Initialize middleware objects
             var middlewareObjects = connectionContext.RequestServices.GetRequiredService<IEnumerable<IFtpMiddleware>>();

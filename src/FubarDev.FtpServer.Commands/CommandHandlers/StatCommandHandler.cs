@@ -2,6 +2,7 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -16,6 +17,8 @@ using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.ListFormatters;
 using FubarDev.FtpServer.Utilities;
 
+using Microsoft.Extensions.DependencyInjection;
+
 namespace FubarDev.FtpServer.CommandHandlers
 {
     /// <summary>
@@ -24,19 +27,19 @@ namespace FubarDev.FtpServer.CommandHandlers
     [FtpCommandHandler("STAT")]
     public class StatCommandHandler : FtpCommandHandler
     {
-        private readonly IFtpServer _server;
+        private readonly IServiceProvider _serviceProvider;
         private readonly IBackgroundTransferWorker _backgroundTransferWorker;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StatCommandHandler"/> class.
         /// </summary>
-        /// <param name="server">The FTP server.</param>
+        /// <param name="serviceProvider">The service provider.</param>
         /// <param name="backgroundTransferWorker">The background transfer worker service.</param>
         public StatCommandHandler(
-            IFtpServer server,
+            IServiceProvider serviceProvider,
             IBackgroundTransferWorker backgroundTransferWorker)
         {
-            _server = server;
+            _serviceProvider = serviceProvider;
             _backgroundTransferWorker = backgroundTransferWorker;
         }
 
@@ -55,9 +58,10 @@ namespace FubarDev.FtpServer.CommandHandlers
         {
             var taskStates = _backgroundTransferWorker.GetStates();
             var statusMessage = new StringBuilder();
+            var statistics = _serviceProvider.GetRequiredService<IFtpServerStatistics>();
             statusMessage.AppendFormat(
                 "Server functional, {0} open connections",
-                _server.Statistics.ActiveConnections);
+                statistics.ActiveConnections);
             if (taskStates.Count != 0)
             {
                 statusMessage.AppendFormat(", {0} active background transfers", taskStates.Count);
