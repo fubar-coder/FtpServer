@@ -77,11 +77,6 @@ namespace FubarDev.FtpServer.Networking
         /// <inheritdoc />
         public virtual async Task StopAsync(CancellationToken cancellationToken)
         {
-            if (Status != FtpServiceStatus.Running && Status != FtpServiceStatus.Stopped && Status != FtpServiceStatus.Paused)
-            {
-                throw new InvalidOperationException($"Status must be {FtpServiceStatus.Running}, {FtpServiceStatus.Stopped}, or {FtpServiceStatus.Paused}, but was {Status}.");
-            }
-
             await OnStopRequestingAsync(cancellationToken)
                .ConfigureAwait(false);
 

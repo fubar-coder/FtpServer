@@ -18,6 +18,7 @@ using FubarDev.FtpServer.Authentication;
 using FubarDev.FtpServer.CommandExtensions;
 using FubarDev.FtpServer.Commands;
 using FubarDev.FtpServer.ConnectionHandlers;
+using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.FileSystem.DotNet;
 using FubarDev.FtpServer.FileSystem.GoogleDrive;
@@ -283,7 +284,9 @@ namespace TestFtpServer
             X509Certificate2 certificate)
         {
             var serviceProvider = connectionContext.Features.Get<IServiceProvidersFeature>().RequestServices;
-            var secureConnectionAdapterManager = serviceProvider.GetRequiredService<IFtpSecureConnectionAdapterManager>();
+            var secureConnectionAdapterManager = connectionContext.Features
+               .Get<INetworkStreamFeature>()
+               .SecureConnectionAdapterManager;
             await secureConnectionAdapterManager.EnableSslStreamAsync(certificate, cancellationToken)
                .ConfigureAwait(false);
             var stateMachine = serviceProvider.GetRequiredService<IFtpLoginStateMachine>();
