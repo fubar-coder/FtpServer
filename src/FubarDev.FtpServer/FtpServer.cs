@@ -49,11 +49,13 @@ namespace FubarDev.FtpServer
         /// </summary>
         /// <param name="serverOptions">The server options.</param>
         /// <param name="serviceProvider">The service provider used to query services.</param>
+        /// <param name="loggerFactory">The logger factory.</param>
         /// <param name="connectionListenerFactory">The connection listener factory.</param>
         /// <param name="logger">The FTP server logger.</param>
         public FtpServer(
             IOptions<FtpServerOptions> serverOptions,
             IServiceProvider serviceProvider,
+            ILoggerFactory? loggerFactory,
             IConnectionListenerFactory? connectionListenerFactory = null,
             ILogger<FtpServer>? logger = null)
         {
@@ -69,6 +71,7 @@ namespace FubarDev.FtpServer
                 tcpClientChannel,
                 serverOptions,
                 _serverShutdown,
+                loggerFactory,
                 connectionListenerFactory,
                 logger);
             _serverListener.ListenerStarted += (s, e) =>
@@ -334,6 +337,19 @@ namespace FubarDev.FtpServer
                     return;
                 }
 
+                // Ensure that the decoration of IFtpConnectionInitializer comes into effect.
+                // ReSharper disable once UnusedVariable
+                var initializer = scope.ServiceProvider.GetRequiredService<IFtpConnectionInitializer>();
+
+                // Connection configuration by host
+                var connectionContext = connection.Context;
+                var asyncInitFunctions = OnConfigureConnection(connectionContext);
+                foreach (var asyncInitFunction in asyncInitFunctions)
+                {
+                    await asyncInitFunction(connectionContext, CancellationToken.None)
+                       .ConfigureAwait(false);
+                }
+
                 // Send initial message
                 var serverCommandWriter = connection.Features.Get<IServerCommandFeature>().ServerCommandWriter;
 
@@ -365,17 +381,6 @@ namespace FubarDev.FtpServer
 
                 // Statistics
                 _statisticsCollector.AddConnection();
-
-                // Connection configuration by host
-                var connectionContext = scope.ServiceProvider
-                   .GetRequiredService<IFtpConnectionContextAccessor>()
-                   .Context;
-                var asyncInitFunctions = OnConfigureConnection(connectionContext);
-                foreach (var asyncInitFunction in asyncInitFunctions)
-                {
-                    await asyncInitFunction(connectionContext, CancellationToken.None)
-                       .ConfigureAwait(false);
-                }
 
                 // Start connection
                 await connection.StartAsync()

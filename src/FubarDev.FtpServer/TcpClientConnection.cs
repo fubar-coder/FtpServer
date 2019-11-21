@@ -61,12 +61,12 @@ namespace FubarDev.FtpServer
                 originalStream,
                 _socketCommandPipe.Writer,
                 this,
-                loggerFactory?.CreateLogger($"{nameof(StreamPipeReaderService)}:Socket:Receive"));
+                loggerFactory?.CreateLogger($"{typeof(TcpClientConnection).FullName}:Receive"));
             _streamWriterService = new StreamPipeWriterService(
                 originalStream,
                 _socketResponsePipe.Reader,
                 ConnectionClosed,
-                loggerFactory?.CreateLogger($"{nameof(StreamPipeWriterService)}:Socket:Transmit"));
+                loggerFactory?.CreateLogger($"{typeof(TcpClientConnection).FullName}:Transmit"));
         }
 
         /// <inheritdoc />

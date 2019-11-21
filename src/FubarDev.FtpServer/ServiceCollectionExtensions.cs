@@ -44,6 +44,7 @@ namespace Microsoft.Extensions.DependencyInjection
             services.AddOptions();
 
             services.AddSingleton<IFtpServer, FtpServer>();
+            services.AddSingleton<IFtpConnectionInitializer>(sp => sp.GetRequiredService<IFtpServer>());
             services.AddSingleton<ITemporaryDataFactory, TemporaryDataFactory>();
             services.AddSingleton<IPasvListenerFactory, PasvListenerFactory>();
             services.AddSingleton<IPasvAddressResolver, SimplePasvAddressResolver>();

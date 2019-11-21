@@ -23,7 +23,6 @@ using FubarDev.FtpServer.ConnectionChecks;
 using FubarDev.FtpServer.DataConnection;
 using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.Localization;
-using FubarDev.FtpServer.Networking;
 using FubarDev.FtpServer.ServerCommands;
 
 using Microsoft.AspNetCore.Connections;
@@ -52,8 +51,6 @@ namespace FubarDev.FtpServer
         private readonly Channel<IServerCommand> _serverCommandChannel =
             Channel.CreateBounded<IServerCommand>(new BoundedChannelOptions(5));
 
-        private readonly Task _commandReader;
-
         private readonly Channel<FtpCommand> _ftpCommandChannel = Channel.CreateBounded<FtpCommand>(5);
 
         private readonly int? _dataPort;
@@ -81,6 +78,8 @@ namespace FubarDev.FtpServer
         private Task? _commandChannelReader;
 
         private Task? _serverCommandHandler;
+
+        private Task? _commandReader;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FtpConnection"/> class.
@@ -114,8 +113,6 @@ namespace FubarDev.FtpServer
             var defaultEncoding = options.Value.DefaultEncoding ?? Encoding.ASCII;
             var applicationInputPipe = new Pipe();
             var applicationOutputPipe = new Pipe();
-            var connectionPipe = new DuplexPipe(applicationOutputPipe.Reader, applicationInputPipe.Writer);
-            var transport = new DuplexPipe(applicationInputPipe.Reader, applicationOutputPipe.Writer);
             var remoteEndPoint = (IPEndPoint)connection.RemoteEndPoint;
 
             _context = new FtpConnectionContext(
@@ -123,9 +120,9 @@ namespace FubarDev.FtpServer
                 defaultEncoding,
                 _serverCommandChannel.Writer,
                 connection.Transport,
-                connectionPipe,
                 sslStreamWrapperFactory,
-                transport,
+                applicationInputPipe,
+                applicationOutputPipe,
                 connection.LocalEndPoint,
                 remoteEndPoint,
                 serviceProvider);
@@ -157,10 +154,6 @@ namespace FubarDev.FtpServer
             _connectionClosedRegistration = connection.ConnectionClosed.Register(() => _context.Abort());
 
             _logger = logger;
-
-            _commandReader = ReadCommandsFromPipeline(
-                _ftpCommandChannel.Writer,
-                _context.ConnectionClosed);
         }
 
         /// <inheritdoc />
@@ -211,6 +204,10 @@ namespace FubarDev.FtpServer
                 await _context.SecureConnectionAdapterManager.StartAsync(CancellationToken.None)
                    .ConfigureAwait(false);
 
+                _commandReader = ReadCommandsFromPipeline(
+                    _ftpCommandChannel.Writer,
+                    _context.ConnectionClosed);
+
                 _commandChannelReader = CommandChannelDispatcherAsync(
                     _ftpCommandChannel.Reader,
                     _context.ConnectionClosed);
@@ -251,7 +248,11 @@ namespace FubarDev.FtpServer
                     try
                     {
                         _serverCommandChannel.Writer.Complete();
-                        await _commandReader.ConfigureAwait(false);
+
+                        if (_commandReader != null)
+                        {
+                            await _commandReader.ConfigureAwait(false);
+                        }
 
                         if (_commandChannelReader != null)
                         {
@@ -570,67 +571,6 @@ namespace FubarDev.FtpServer
                 // Trigger stopping this connection
                 Abort();
             }
-        }
-
-        private class ConnectionClosingNetworkStreamReader : StreamPipeReaderService
-        {
-            private readonly IConnectionLifetimeFeature _lifetimeFeature;
-
-            public ConnectionClosingNetworkStreamReader(
-                Stream stream,
-                PipeWriter pipeWriter,
-                IConnectionLifetimeFeature lifetimeFeature,
-                ILogger? logger = null)
-                : base(stream, pipeWriter, lifetimeFeature.ConnectionClosed, logger)
-            {
-                _lifetimeFeature = lifetimeFeature;
-            }
-
-            /// <inheritdoc />
-            protected override async Task<int> ReadFromStreamAsync(byte[] buffer, int offset, int length, CancellationToken cancellationToken)
-            {
-                var readTask = Stream
-                   .ReadAsync(buffer, offset, length, cancellationToken);
-
-                // We ensure that this service can be closed ASAP with the help
-                // of a Task.Delay.
-                var resultTask = await Task.WhenAny(readTask, Task.Delay(-1, cancellationToken))
-                   .ConfigureAwait(false);
-                if (resultTask != readTask || cancellationToken.IsCancellationRequested)
-                {
-                    Logger?.LogTrace("Cancelled through Task.Delay");
-                    return 0;
-                }
-
-                var result = readTask.Result;
-                readTask.Dispose();
-                return result;
-            }
-
-            /// <inheritdoc />
-            protected override async Task OnCloseAsync(Exception? exception, CancellationToken cancellationToken)
-            {
-                await base.OnCloseAsync(exception, cancellationToken)
-                   .ConfigureAwait(false);
-
-                // Signal a closed connection.
-                _lifetimeFeature.Abort();
-            }
-        }
-
-        private class DuplexPipe : IDuplexPipe
-        {
-            public DuplexPipe(PipeReader input, PipeWriter output)
-            {
-                Input = input;
-                Output = output;
-            }
-
-            /// <inheritdoc />
-            public PipeReader Input { get; }
-
-            /// <inheritdoc />
-            public PipeWriter Output { get; }
         }
     }
 }

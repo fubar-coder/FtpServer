@@ -22,8 +22,6 @@ using FubarDev.FtpServer.ServerCommands;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
-using QuickStart.AspNetCoreHost;
-
 // ReSharper disable once CheckNamespace
 namespace Microsoft.Extensions.DependencyInjection
 {
@@ -52,6 +50,8 @@ namespace Microsoft.Extensions.DependencyInjection
 #pragma warning restore 618
             services.AddSingleton<IFtpConnectionContextAccessor, FtpConnectionContextAccessor>();
             services.AddSingleton<FtpServerStatisticsCollector>();
+            services.AddSingleton<FtpConnectionInitializer>();
+            services.AddSingleton<IFtpConnectionInitializer>(sp => sp.GetRequiredService<FtpConnectionInitializer>());
 
             // Statistics are always transient to get the current values.
             services.AddTransient(sp => sp.GetRequiredService<FtpServerStatisticsCollector>().GetStatistics());

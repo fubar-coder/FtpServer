@@ -236,15 +236,15 @@ namespace TestFtpServer
                 if (implicitFtpsCertificate != null)
                 {
                     // Ensure that PROT and PBSZ commands are working.
-                    services.Decorate<IFtpServer>(
-                        (ftpServer, _) =>
+                    services.Decorate<IFtpConnectionInitializer>(
+                        (initializer, _) =>
                         {
-                            ftpServer.ConfigureConnection += (s, e) =>
+                            initializer.ConfigureConnection += (s, e) =>
                             {
                                 e.AddAsyncInit((connection, ct) => ActivateImplicitTls(connection, ct, implicitFtpsCertificate));
                             };
 
-                            return ftpServer;
+                            return initializer;
                         });
                 }
             }

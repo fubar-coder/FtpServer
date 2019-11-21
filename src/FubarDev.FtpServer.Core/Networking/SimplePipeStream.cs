@@ -3,13 +3,10 @@
 // </copyright>
 
 using System;
-using System.Buffers;
 using System.IO;
 using System.IO.Pipelines;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.Networking
 {
@@ -18,35 +15,30 @@ namespace FubarDev.FtpServer.Networking
     /// </summary>
     internal class SimplePipeStream : Stream
     {
-        private readonly PipeReader _input;
-        private readonly PipeWriter _output;
-
-        private readonly ILogger<SimplePipeStream>? _logger;
+        private readonly Stream _input;
+        private readonly Stream _output;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SimplePipeStream"/> class.
         /// </summary>
         /// <param name="input">The pipe reader to be used to read from.</param>
         /// <param name="output">The pipe writer to be used to write to.</param>
-        /// <param name="logger">The logger.</param>
         public SimplePipeStream(
             PipeReader input,
-            PipeWriter output,
-            ILogger<SimplePipeStream>? logger = null)
+            PipeWriter output)
         {
-            _input = input;
-            _output = output;
-            _logger = logger;
+            _input = input.AsStream();
+            _output = output.AsStream();
         }
 
         /// <inheritdoc />
-        public override bool CanRead => true;
+        public override bool CanRead => _input.CanRead;
 
         /// <inheritdoc />
         public override bool CanSeek => false;
 
         /// <inheritdoc />
-        public override bool CanWrite => true;
+        public override bool CanWrite => _output.CanWrite;
 
         /// <inheritdoc />
         public override long Length => throw new NotSupportedException();
@@ -67,79 +59,37 @@ namespace FubarDev.FtpServer.Networking
         /// <inheritdoc />
         public override int Read(byte[] buffer, int offset, int count)
         {
-            _logger?.LogTrace("Try to read {count} bytes", count);
-
-            // ValueTask uses .GetAwaiter().GetResult() if necessary
-            // https://github.com/dotnet/corefx/blob/f9da3b4af08214764a51b2331f3595ffaf162abe/src/System.Threading.Tasks.Extensions/src/System/Threading/Tasks/ValueTask.cs#L156
-            return ReadAsyncInternal(new Memory<byte>(buffer, offset, count), CancellationToken.None).Result;
+            return _input.Read(buffer, offset, count);
         }
 
         /// <inheritdoc />
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
-            _logger?.LogTrace("Try to read {count} bytes asynchronously", count);
-            return ReadAsyncInternal(new Memory<byte>(buffer, offset, count), cancellationToken).AsTask();
+            return _input.ReadAsync(buffer, offset, count, cancellationToken);
         }
 
         /// <inheritdoc />
         public override void Write(byte[] buffer, int offset, int count)
         {
-            _logger?.LogTrace("Try to write {count} bytes", count);
-            WriteAsync(buffer, offset, count).GetAwaiter().GetResult();
+            _output.Write(buffer, offset, count);
         }
 
         /// <inheritdoc />
-        public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
-            _logger?.LogTrace("Try to write {count} bytes asynchronously", count);
-
-            if (buffer != null)
-            {
-                _output.Write(new ReadOnlySpan<byte>(buffer, offset, count));
-            }
-
-            await _output.FlushAsync(cancellationToken);
+            return _output.WriteAsync(buffer, offset, count, cancellationToken);
         }
 
         /// <inheritdoc />
         public override void Flush()
         {
-            FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+            _output.Flush();
         }
 
         /// <inheritdoc />
-        public override async Task FlushAsync(CancellationToken cancellationToken)
+        public override Task FlushAsync(CancellationToken cancellationToken)
         {
-            await _output.FlushAsync(cancellationToken);
-        }
-
-        private async ValueTask<int> ReadAsyncInternal(Memory<byte> destination, CancellationToken cancellationToken)
-        {
-            while (true)
-            {
-                var result = await _input.ReadAsync(cancellationToken)
-                   .ConfigureAwait(false);
-
-                var readableBuffer = result.Buffer;
-                if (!readableBuffer.IsEmpty)
-                {
-                    _logger?.LogTrace("Received {byteCount} bytes", readableBuffer.Length);
-
-                    var count = (int)Math.Min(readableBuffer.Length, destination.Length);
-                    readableBuffer = readableBuffer.Slice(0, count);
-                    readableBuffer.CopyTo(destination.Span);
-                    _input.AdvanceTo(readableBuffer.GetPosition(count));
-
-                    return count;
-                }
-
-                _input.AdvanceTo(readableBuffer.End);
-
-                if (result.IsCompleted || result.IsCanceled)
-                {
-                    return 0;
-                }
-            }
+            return _output.FlushAsync(cancellationToken);
         }
     }
 }

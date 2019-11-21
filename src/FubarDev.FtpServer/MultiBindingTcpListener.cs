@@ -33,11 +33,13 @@ namespace FubarDev.FtpServer
         /// <param name="address">The address/host name to bind to.</param>
         /// <param name="port">The listener port.</param>
         /// <param name="connectionListenerFactory">The connection listener factory.</param>
+        /// <param name="loggerFactory">The logger factory.</param>
         /// <param name="logger">The logger.</param>
         public MultiBindingTcpListener(
             string? address,
             int port,
             IConnectionListenerFactory? connectionListenerFactory = null,
+            ILoggerFactory? loggerFactory = null,
             ILogger? logger = null)
         {
             if (port < 0 || port > 65535)
@@ -45,7 +47,8 @@ namespace FubarDev.FtpServer
                 throw new ArgumentOutOfRangeException(nameof(port), "The port argument is out of range");
             }
 
-            _connectionListenerFactory = connectionListenerFactory ?? new TcpListenerConnectionListenerFactory();
+            _connectionListenerFactory = connectionListenerFactory
+                                         ?? new TcpListenerConnectionListenerFactory(loggerFactory);
             _address = address;
             Port = _port = port;
             _logger = logger;

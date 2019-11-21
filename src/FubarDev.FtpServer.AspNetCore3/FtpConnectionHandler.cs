@@ -13,7 +13,6 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
-using FubarDev.FtpServer;
 using FubarDev.FtpServer.Authentication;
 using FubarDev.FtpServer.Commands;
 using FubarDev.FtpServer.Compatibility;
@@ -28,7 +27,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace QuickStart.AspNetCoreHost
+namespace FubarDev.FtpServer
 {
     internal class FtpConnectionHandler : ConnectionHandler
     {
@@ -43,6 +42,7 @@ namespace QuickStart.AspNetCoreHost
         private readonly ActiveDataConnectionFeatureFactory _activeDataConnectionFeatureFactory;
         private readonly IFtpServerMessages _ftpServerMessages;
         private readonly FtpServerStatisticsCollector _statisticsCollector;
+        private readonly FtpConnectionInitializer _ftpConnectionInitializer;
         private readonly ILogger<FtpConnectionHandler>? _logger;
         private readonly PortCommandOptions _portOptions;
         private readonly FtpConnectionOptions _options;
@@ -63,6 +63,7 @@ namespace QuickStart.AspNetCoreHost
             ActiveDataConnectionFeatureFactory activeDataConnectionFeatureFactory,
             IFtpServerMessages ftpServerMessages,
             FtpServerStatisticsCollector statisticsCollector,
+            FtpConnectionInitializer ftpConnectionInitializer,
             ILogger<FtpConnectionHandler>? logger = null)
         {
             _maxActiveConnections = serverOptions.Value.MaxActiveConnections;
@@ -75,6 +76,7 @@ namespace QuickStart.AspNetCoreHost
             _activeDataConnectionFeatureFactory = activeDataConnectionFeatureFactory;
             _ftpServerMessages = ftpServerMessages;
             _statisticsCollector = statisticsCollector;
+            _ftpConnectionInitializer = ftpConnectionInitializer;
             _logger = logger;
             _portOptions = portOptions.Value;
             _options = options.Value;
@@ -90,17 +92,15 @@ namespace QuickStart.AspNetCoreHost
             var defaultEncoding = _options.DefaultEncoding ?? Encoding.ASCII;
             var applicationInputPipe = new Pipe();
             var applicationOutputPipe = new Pipe();
-            var connectionPipe = new DuplexPipe(applicationOutputPipe.Reader, applicationInputPipe.Writer);
-            var transport = new DuplexPipe(applicationInputPipe.Reader, applicationOutputPipe.Writer);
 
             var context = new FtpConnectionContext(
                 _catalogLoader,
                 defaultEncoding,
                 serverCommandChannel.Writer,
                 connection.Transport,
-                connectionPipe,
                 _sslStreamWrapperFactory,
-                transport,
+                applicationInputPipe,
+                applicationOutputPipe,
                 connection.LocalEndPoint,
                 connection.RemoteEndPoint,
                 scope.ServiceProvider);
@@ -124,7 +124,22 @@ namespace QuickStart.AspNetCoreHost
             };
 
             using var loggerScope = _logger?.BeginScope(properties);
-            var commandReader = ReadCommandsFromPipeline(context, ftpCommandChannel.Writer);
+
+            // Set the checks for the activity information of the FTP connection.
+            var checks = scope.ServiceProvider.GetRequiredService<IEnumerable<IFtpConnectionCheck>>().ToList();
+            context.SetChecks(checks);
+
+            // Ensure that the decoration of IFtpConnectionInitializer comes into effect.
+            // ReSharper disable once UnusedVariable
+            var initializer = scope.ServiceProvider.GetRequiredService<IFtpConnectionInitializer>();
+
+            // Call the initializers
+            var args = new ConnectionEventArgs(context);
+            _ftpConnectionInitializer.OnConfigureConnection(this, args);
+            foreach (var asyncInitFunction in args.AsyncInitFunctions)
+            {
+                await asyncInitFunction(context, context.ConnectionClosed).ConfigureAwait(false);
+            }
 
             // Set the default FTP data connection feature
             var dataConnectionFeature = await _activeDataConnectionFeatureFactory
@@ -132,16 +147,13 @@ namespace QuickStart.AspNetCoreHost
                .ConfigureAwait(false);
             context.Features.Set(dataConnectionFeature);
 
-            // Set the checks for the activity information of the FTP connection.
-            var checks = scope.ServiceProvider.GetRequiredService<IEnumerable<IFtpConnectionCheck>>().ToList();
-            context.SetChecks(checks);
-
             // Connection information
             _logger?.LogInformation("Connected from {remoteIp}", remoteEndPoint);
 
             await context.SecureConnectionAdapterManager.StartAsync(CancellationToken.None)
                .ConfigureAwait(false);
 
+            var commandReader = ReadCommandsFromPipeline(context, ftpCommandChannel.Writer);
             var commandChannelReader = CommandChannelDispatcherAsync(context, ftpCommandChannel.Reader);
             var serverCommandHandler = SendResponsesAsync(context, serverCommandChannel.Reader);
 
@@ -281,8 +293,8 @@ namespace QuickStart.AspNetCoreHost
         /// Reads commands from the transport pipeline and adds them to the command channel.
         /// </summary>
         /// <param name="connectionContext">The connection context.</param>
-        /// <param name="commandWriter"></param>
-        /// <returns></returns>
+        /// <param name="commandWriter">The FTP command writer.</param>
+        /// <returns>The task.</returns>
         private async Task ReadCommandsFromPipeline(
             FtpConnectionContext connectionContext,
             ChannelWriter<FtpCommand> commandWriter)
@@ -455,21 +467,6 @@ namespace QuickStart.AspNetCoreHost
             CancellationToken cancellationToken)
         {
             return ftpCommandDispatcher.DispatchAsync(context, cancellationToken);
-        }
-
-        private class DuplexPipe : IDuplexPipe
-        {
-            public DuplexPipe(PipeReader input, PipeWriter output)
-            {
-                Input = input;
-                Output = output;
-            }
-
-            /// <inheritdoc />
-            public PipeReader Input { get; }
-
-            /// <inheritdoc />
-            public PipeWriter Output { get; }
         }
     }
 }

@@ -4,9 +4,7 @@
 
 using System.Threading;
 
-using FubarDev.FtpServer;
-
-namespace QuickStart.AspNetCoreHost
+namespace FubarDev.FtpServer
 {
     /// <summary>
     /// Collector of statistics.

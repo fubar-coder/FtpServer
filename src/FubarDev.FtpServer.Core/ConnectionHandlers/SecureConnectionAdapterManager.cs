@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 
 using FubarDev.FtpServer.Authentication;
 
+using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer.ConnectionHandlers
@@ -20,7 +21,9 @@ namespace FubarDev.FtpServer.ConnectionHandlers
     {
         private readonly IDuplexPipe _socketPipe;
         private readonly IDuplexPipe _connectionPipe;
+        private readonly IDuplexPipe _transportPipe;
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
+        private readonly IConnectionTransportFeature _transportFeature;
         private readonly CancellationToken _connectionClosed;
         private IFtpConnectionAdapter _activeCommunicationService;
 
@@ -29,19 +32,26 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         /// </summary>
         /// <param name="socketPipe">The pipe from the socket.</param>
         /// <param name="connectionPipe">The pipe to the connection object.</param>
+        /// <param name="transportPipe">The new transport pipe.</param>
         /// <param name="sslStreamWrapperFactory">The SSL stream wrapper factory.</param>
+        /// <param name="transportFeature">The transport feature to update.</param>
         /// <param name="connectionClosed">The cancellation token for a closed connection.</param>
         /// <param name="loggerFactory">The logger factory.</param>
         public SecureConnectionAdapterManager(
             IDuplexPipe socketPipe,
             IDuplexPipe connectionPipe,
+            IDuplexPipe transportPipe,
             ISslStreamWrapperFactory sslStreamWrapperFactory,
+            IConnectionTransportFeature transportFeature,
             CancellationToken connectionClosed,
             ILoggerFactory? loggerFactory = null)
         {
             _socketPipe = socketPipe;
             _connectionPipe = connectionPipe;
+            _transportPipe = transportPipe;
             _sslStreamWrapperFactory = sslStreamWrapperFactory;
+            _transportFeature = transportFeature;
+            _transportFeature.Transport = socketPipe;
             _connectionClosed = connectionClosed;
             _activeCommunicationService = new PassThroughConnectionAdapter(
                 socketPipe,
@@ -54,27 +64,35 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         public FtpServiceStatus Status => _activeCommunicationService.Status;
 
         /// <inheritdoc />
-        public Task PauseAsync(CancellationToken cancellationToken)
+        public async Task PauseAsync(CancellationToken cancellationToken)
         {
-            return _activeCommunicationService.PauseAsync(cancellationToken);
+            await _activeCommunicationService.PauseAsync(cancellationToken)
+               .ConfigureAwait(false);
+            _transportFeature.Transport = _socketPipe;
         }
 
         /// <inheritdoc />
-        public Task ContinueAsync(CancellationToken cancellationToken)
+        public async Task ContinueAsync(CancellationToken cancellationToken)
         {
-            return _activeCommunicationService.ContinueAsync(cancellationToken);
+            await _activeCommunicationService.ContinueAsync(cancellationToken)
+               .ConfigureAwait(false);
+            _transportFeature.Transport = _transportPipe;
         }
 
         /// <inheritdoc />
-        public Task StartAsync(CancellationToken cancellationToken)
+        public async Task StartAsync(CancellationToken cancellationToken)
         {
-            return _activeCommunicationService.StartAsync(cancellationToken);
+            await _activeCommunicationService.StartAsync(cancellationToken)
+               .ConfigureAwait(false);
+            _transportFeature.Transport = _transportPipe;
         }
 
         /// <inheritdoc />
-        public Task StopAsync(CancellationToken cancellationToken)
+        public async Task StopAsync(CancellationToken cancellationToken)
         {
-            return _activeCommunicationService.StopAsync(cancellationToken);
+            await _activeCommunicationService.StopAsync(cancellationToken)
+               .ConfigureAwait(false);
+            _transportFeature.Transport = _socketPipe;
         }
 
         /// <inheritdoc />

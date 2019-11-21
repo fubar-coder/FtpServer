@@ -78,9 +78,9 @@ namespace FubarDev.FtpServer
         /// <param name="defaultEncoding">The default file list encoding.</param>
         /// <param name="serverCommandWriter">Writer for server commands.</param>
         /// <param name="socketPipe">The pipe from the socket.</param>
-        /// <param name="connectionPipe">The pipe to the connection object.</param>
         /// <param name="sslStreamWrapperFactory">The SSL stream wrapper factory.</param>
-        /// <param name="transport">The duplex pipe for control connection data transport.</param>
+        /// <param name="applicationInputPipe">The pipe that's used to receive data from the connection.</param>
+        /// <param name="applicationOutputPipe">The pipe that's used to send data to the connection.</param>
         /// <param name="localEndPoint">The local end point.</param>
         /// <param name="remoteEndPoint">The remote end point.</param>
         /// <param name="requestServices">The service provider.</param>
@@ -89,9 +89,9 @@ namespace FubarDev.FtpServer
             Encoding defaultEncoding,
             ChannelWriter<IServerCommand> serverCommandWriter,
             IDuplexPipe socketPipe,
-            IDuplexPipe connectionPipe,
             ISslStreamWrapperFactory sslStreamWrapperFactory,
-            IDuplexPipe transport,
+            Pipe applicationInputPipe,
+            Pipe applicationOutputPipe,
             EndPoint localEndPoint,
             EndPoint remoteEndPoint,
             IServiceProvider requestServices)
@@ -121,6 +121,9 @@ namespace FubarDev.FtpServer
             features.Set<IFtpStatisticsCollectorFeature>(this);
             features.Set<IFtpConnectionStatusCheck>(this);
 
+            var connectionPipe = new DuplexPipe(applicationOutputPipe.Reader, applicationInputPipe.Writer);
+            var transportPipe = new DuplexPipe(applicationInputPipe.Reader, applicationOutputPipe.Writer);
+
             ConnectionClosed = _connectionClosedTokenSource.Token;
             ConnectionId = CreateConnectionId();
             Features = features;
@@ -131,10 +134,12 @@ namespace FubarDev.FtpServer
             SecureConnectionAdapterManager = new SecureConnectionAdapterManager(
                 socketPipe,
                 connectionPipe,
+                transportPipe,
                 sslStreamWrapperFactory,
+                this,
                 _connectionClosedTokenSource.Token,
                 requestServices.GetService<ILoggerFactory>());
-            Transport = transport;
+            Transport = socketPipe;
             LocalEndPoint = localEndPoint;
             RemoteEndPoint = remoteEndPoint;
             RequestServices = requestServices;
@@ -418,6 +423,21 @@ namespace FubarDev.FtpServer
             {
                 _feature.Remove(_collector);
             }
+        }
+
+        private class DuplexPipe : IDuplexPipe
+        {
+            public DuplexPipe(PipeReader input, PipeWriter output)
+            {
+                Input = input;
+                Output = output;
+            }
+
+            /// <inheritdoc />
+            public PipeReader Input { get; }
+
+            /// <inheritdoc />
+            public PipeWriter Output { get; }
         }
     }
 }

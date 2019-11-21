@@ -9,16 +9,21 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Connections;
+using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer
 {
     internal class TcpListenerConnectionListener : IConnectionListener
     {
         private readonly TcpListener _listener;
+        private readonly ILoggerFactory? _loggerFactory;
 
-        public TcpListenerConnectionListener(TcpListener listener)
+        public TcpListenerConnectionListener(
+            TcpListener listener,
+            ILoggerFactory? loggerFactory = null)
         {
             _listener = listener;
+            _loggerFactory = loggerFactory;
             EndPoint = listener.LocalEndpoint;
         }
 
@@ -49,7 +54,7 @@ namespace FubarDev.FtpServer
                         tcpClient.Client.NoDelay = true;
                     }
 
-                    var connection = new TcpClientConnection(tcpClient);
+                    var connection = new TcpClientConnection(tcpClient, _loggerFactory);
                     await connection.StartAsync();
                     return connection;
                 }

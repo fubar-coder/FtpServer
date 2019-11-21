@@ -9,13 +9,8 @@ namespace FubarDev.FtpServer
     /// <summary>
     /// The interface that must be implemented by the FTP server.
     /// </summary>
-    public interface IFtpServer : IPausableFtpService
+    public interface IFtpServer : IPausableFtpService, IFtpConnectionInitializer
     {
-        /// <summary>
-        /// This event is raised when the connection is ready to be configured.
-        /// </summary>
-        event EventHandler<ConnectionEventArgs> ConfigureConnection;
-
         /// <summary>
         /// This event is raised when the listener was started.
         /// </summary>

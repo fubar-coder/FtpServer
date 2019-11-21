@@ -64,6 +64,7 @@ namespace FubarDev.FtpServer.Networking
                 Logger?.LogTrace("Start reading response");
                 var readResult = await _pipeReader.ReadAsync(cancellationToken)
                    .ConfigureAwait(false);
+                Logger?.LogTrace("{@readResult}", readResult);
 
                 try
                 {

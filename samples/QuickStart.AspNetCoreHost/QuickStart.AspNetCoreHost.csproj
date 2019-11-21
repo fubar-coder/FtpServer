@@ -26,7 +26,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="*.pfx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Scrutor" Version="3.1.0" />
   </ItemGroup>
-  
+
 </Project>

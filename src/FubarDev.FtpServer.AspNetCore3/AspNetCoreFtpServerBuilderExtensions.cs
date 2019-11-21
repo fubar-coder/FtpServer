@@ -8,8 +8,6 @@ using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 
-using QuickStart.AspNetCoreHost;
-
 namespace FubarDev.FtpServer
 {
     /// <summary>
