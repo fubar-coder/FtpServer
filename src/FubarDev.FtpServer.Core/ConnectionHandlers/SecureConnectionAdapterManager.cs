@@ -82,6 +82,11 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         /// <inheritdoc />
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            if (Status == FtpServiceStatus.Running)
+            {
+                return;
+            }
+
             await _activeCommunicationService.StartAsync(cancellationToken)
                .ConfigureAwait(false);
             _transportFeature.Transport = _transportPipe;
@@ -90,6 +95,11 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         /// <inheritdoc />
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            if (Status == FtpServiceStatus.Stopped || Status == FtpServiceStatus.ReadyToRun)
+            {
+                return;
+            }
+
             await _activeCommunicationService.StopAsync(cancellationToken)
                .ConfigureAwait(false);
             _transportFeature.Transport = _socketPipe;

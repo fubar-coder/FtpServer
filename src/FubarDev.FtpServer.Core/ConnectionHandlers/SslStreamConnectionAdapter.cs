@@ -43,7 +43,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         }
 
         /// <inheritdoc />
-        public FtpServiceStatus Status => Receiver.Status;
+        public FtpServiceStatus Status => _info?.ReceiverService.Status ?? FtpServiceStatus.ReadyToRun;
 
         private IPausableFtpService Receiver
             => _info?.ReceiverService
