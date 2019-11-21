@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Connections;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace FubarDev.FtpServer
@@ -32,12 +33,14 @@ namespace FubarDev.FtpServer
         /// </summary>
         /// <param name="address">The address/host name to bind to.</param>
         /// <param name="port">The listener port.</param>
+        /// <param name="serviceProvider">The service provider.</param>
         /// <param name="connectionListenerFactory">The connection listener factory.</param>
         /// <param name="loggerFactory">The logger factory.</param>
         /// <param name="logger">The logger.</param>
         public MultiBindingTcpListener(
             string? address,
             int port,
+            IServiceProvider serviceProvider,
             IConnectionListenerFactory? connectionListenerFactory = null,
             ILoggerFactory? loggerFactory = null,
             ILogger? logger = null)
@@ -47,8 +50,17 @@ namespace FubarDev.FtpServer
                 throw new ArgumentOutOfRangeException(nameof(port), "The port argument is out of range");
             }
 
-            _connectionListenerFactory = connectionListenerFactory
-                                         ?? new TcpListenerConnectionListenerFactory(loggerFactory);
+            if (connectionListenerFactory != null)
+            {
+                _connectionListenerFactory = connectionListenerFactory;
+            }
+            else
+            {
+                var adapters = serviceProvider.GetRequiredService<IEnumerable<IFtpControlStreamAdapter>>()
+                   .ToList();
+                _connectionListenerFactory = new TcpListenerConnectionListenerFactory(adapters, loggerFactory);
+            }
+
             _address = address;
             Port = _port = port;
             _logger = logger;

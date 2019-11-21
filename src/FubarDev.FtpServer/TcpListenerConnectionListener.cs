@@ -3,6 +3,8 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -16,13 +18,16 @@ namespace FubarDev.FtpServer
     internal class TcpListenerConnectionListener : IConnectionListener
     {
         private readonly TcpListener _listener;
+        private readonly List<IFtpControlStreamAdapter> _controlStreamAdapters;
         private readonly ILoggerFactory? _loggerFactory;
 
         public TcpListenerConnectionListener(
             TcpListener listener,
+            List<IFtpControlStreamAdapter> controlStreamAdapters,
             ILoggerFactory? loggerFactory = null)
         {
             _listener = listener;
+            _controlStreamAdapters = controlStreamAdapters;
             _loggerFactory = loggerFactory;
             EndPoint = listener.LocalEndpoint;
         }
@@ -54,7 +59,13 @@ namespace FubarDev.FtpServer
                         tcpClient.Client.NoDelay = true;
                     }
 
-                    var connection = new TcpClientConnection(tcpClient, _loggerFactory);
+                    Stream clientStream = tcpClient.GetStream();
+                    foreach (var adapter in _controlStreamAdapters)
+                    {
+                        clientStream = await adapter.WrapAsync(clientStream, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    var connection = new TcpClientConnection(tcpClient, clientStream, _loggerFactory);
                     await connection.StartAsync();
                     return connection;
                 }

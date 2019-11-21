@@ -2,6 +2,8 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -17,10 +19,14 @@ namespace FubarDev.FtpServer
     /// </summary>
     internal class TcpListenerConnectionListenerFactory : IConnectionListenerFactory
     {
+        private readonly List<IFtpControlStreamAdapter> _controlStreamAdapters;
         private readonly ILoggerFactory? _loggerFactory;
 
-        public TcpListenerConnectionListenerFactory(ILoggerFactory? loggerFactory = null)
+        public TcpListenerConnectionListenerFactory(
+            IEnumerable<IFtpControlStreamAdapter> controlStreamAdapters,
+            ILoggerFactory? loggerFactory = null)
         {
+            _controlStreamAdapters = controlStreamAdapters.ToList();
             _loggerFactory = loggerFactory;
         }
 
@@ -31,7 +37,12 @@ namespace FubarDev.FtpServer
         {
             var listener = new TcpListener((IPEndPoint)endpoint);
             listener.Start();
-            return new ValueTask<IConnectionListener>(new TcpListenerConnectionListener(listener, _loggerFactory));
+
+            var connectionListener = new TcpListenerConnectionListener(
+                listener,
+                _controlStreamAdapters,
+                _loggerFactory);
+            return new ValueTask<IConnectionListener>(connectionListener);
         }
     }
 }

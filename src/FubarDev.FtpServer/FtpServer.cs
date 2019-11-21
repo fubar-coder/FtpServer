@@ -71,6 +71,7 @@ namespace FubarDev.FtpServer
                 tcpClientChannel,
                 serverOptions,
                 _serverShutdown,
+                serviceProvider,
                 loggerFactory,
                 connectionListenerFactory,
                 logger);

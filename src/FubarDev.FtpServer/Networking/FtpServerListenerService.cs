@@ -35,12 +35,14 @@ namespace FubarDev.FtpServer.Networking
         /// <param name="serverOptions">The server options.</param>
         /// <param name="connectionClosedCts">Cancellation token source for a closed connection.</param>
         /// <param name="connectionListenerFactory">The connection listener factory.</param>
+        /// <param name="serviceProvider">The service provider</param>
         /// <param name="loggerFactory">The logger factory.</param>
         /// <param name="logger">The logger.</param>
         public FtpServerListenerService(
             ChannelWriter<ConnectionContext> newClientWriter,
             IOptions<FtpServerOptions> serverOptions,
             CancellationTokenSource connectionClosedCts,
+            IServiceProvider serviceProvider,
             ILoggerFactory? loggerFactory = null,
             IConnectionListenerFactory? connectionListenerFactory = null,
             ILogger? logger = null)
@@ -52,6 +54,7 @@ namespace FubarDev.FtpServer.Networking
             _multiBindingTcpListener = new MultiBindingTcpListener(
                 options.ServerAddress,
                 options.Port,
+                serviceProvider,
                 connectionListenerFactory,
                 loggerFactory,
                 logger);

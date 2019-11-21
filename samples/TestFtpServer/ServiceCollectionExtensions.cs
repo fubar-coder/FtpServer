@@ -2,14 +2,20 @@
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
+#define USE_IMPLICIT_TLS_WITH_ADAPTER
+
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+#if !USE_IMPLICIT_TLS_WITH_ADAPTER
 using System.Security.Cryptography.X509Certificates;
+#endif
 using System.Text;
 using System.Threading;
+#if !USE_IMPLICIT_TLS_WITH_ADAPTER
 using System.Threading.Tasks;
+#endif
 
 using FubarDev.FtpServer;
 using FubarDev.FtpServer.AccountManagement.Directories.RootPerUser;
@@ -17,8 +23,9 @@ using FubarDev.FtpServer.AccountManagement.Directories.SingleRootWithoutHome;
 using FubarDev.FtpServer.Authentication;
 using FubarDev.FtpServer.CommandExtensions;
 using FubarDev.FtpServer.Commands;
-using FubarDev.FtpServer.ConnectionHandlers;
+#if !USE_IMPLICIT_TLS_WITH_ADAPTER
 using FubarDev.FtpServer.Features;
+#endif
 using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.FileSystem.DotNet;
 using FubarDev.FtpServer.FileSystem.GoogleDrive;
@@ -235,13 +242,23 @@ namespace TestFtpServer
                 var implicitFtpsCertificate = options.GetCertificate();
                 if (implicitFtpsCertificate != null)
                 {
+#if USE_IMPLICIT_TLS_WITH_ADAPTER
+                    services
+                       .AddSingleton(new ImplicitFtpsControlConnectionStreamAdapterOptions(implicitFtpsCertificate))
+                       .AddSingleton<IFtpControlStreamAdapter, ImplicitFtpsControlConnectionStreamAdapter>();
+#endif
+
                     // Ensure that PROT and PBSZ commands are working.
                     services.Decorate<IFtpConnectionInitializer>(
                         (initializer, _) =>
                         {
                             initializer.ConfigureConnection += (s, e) =>
                             {
+#if USE_IMPLICIT_TLS_WITH_ADAPTER
+                                ActivateAuthTls(e.ConnectionContext);
+#else
                                 e.AddAsyncInit((connection, ct) => ActivateImplicitTls(connection, ct, implicitFtpsCertificate));
+#endif
                             };
 
                             return initializer;
@@ -278,17 +295,25 @@ namespace TestFtpServer
             return services;
         }
 
+#if !USE_IMPLICIT_TLS_WITH_ADAPTER
         private static async Task ActivateImplicitTls(
             ConnectionContext connectionContext,
             CancellationToken cancellationToken,
             X509Certificate2 certificate)
         {
-            var serviceProvider = connectionContext.Features.Get<IServiceProvidersFeature>().RequestServices;
             var secureConnectionAdapterManager = connectionContext.Features
                .Get<INetworkStreamFeature>()
                .SecureConnectionAdapterManager;
             await secureConnectionAdapterManager.EnableSslStreamAsync(certificate, cancellationToken)
                .ConfigureAwait(false);
+            ActivateAuthTls(connectionContext);
+        }
+#endif
+
+        private static void ActivateAuthTls(
+            ConnectionContext connectionContext)
+        {
+            var serviceProvider = connectionContext.Features.Get<IServiceProvidersFeature>().RequestServices;
             var stateMachine = serviceProvider.GetRequiredService<IFtpLoginStateMachine>();
             var authTlsMechanism = serviceProvider.GetRequiredService<IEnumerable<IAuthenticationMechanism>>()
                .Single(x => x.CanHandle("TLS"));

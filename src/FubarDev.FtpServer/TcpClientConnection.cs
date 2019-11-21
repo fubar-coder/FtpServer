@@ -37,6 +37,7 @@ namespace FubarDev.FtpServer
 
         public TcpClientConnection(
             TcpClient client,
+            Stream clientStream,
             ILoggerFactory? loggerFactory = null)
         {
             var features = new FeatureCollection();
@@ -56,14 +57,13 @@ namespace FubarDev.FtpServer
             TcpClient = client;
             Features = features;
 
-            var originalStream = client.GetStream();
             _streamReaderService = new ConnectionClosingNetworkStreamReader(
-                originalStream,
+                clientStream,
                 _socketCommandPipe.Writer,
                 this,
                 loggerFactory?.CreateLogger($"{typeof(TcpClientConnection).FullName}:Receive"));
             _streamWriterService = new StreamPipeWriterService(
-                originalStream,
+                clientStream,
                 _socketResponsePipe.Reader,
                 ConnectionClosed,
                 loggerFactory?.CreateLogger($"{typeof(TcpClientConnection).FullName}:Transmit"));
