@@ -25,6 +25,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
         private readonly IConnectionTransportFeature _transportFeature;
         private readonly CancellationToken _connectionClosed;
+        private readonly ILoggerFactory? _loggerFactory;
         private IFtpConnectionAdapter _activeCommunicationService;
 
         /// <summary>
@@ -53,6 +54,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
             _transportFeature = transportFeature;
             _transportFeature.Transport = socketPipe;
             _connectionClosed = connectionClosed;
+            _loggerFactory = loggerFactory;
             _activeCommunicationService = new PassThroughConnectionAdapter(
                 socketPipe,
                 connectionPipe,
@@ -151,7 +153,8 @@ namespace FubarDev.FtpServer.ConnectionHandlers
                     _connectionPipe,
                     _sslStreamWrapperFactory,
                     certificate,
-                    _connectionClosed),
+                    _connectionClosed,
+                    _loggerFactory?.CreateLogger<SslStreamConnectionAdapter>()),
                 cancellationToken);
         }
     }

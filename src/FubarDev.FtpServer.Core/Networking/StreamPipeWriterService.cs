@@ -64,7 +64,6 @@ namespace FubarDev.FtpServer.Networking
                 Logger?.LogTrace("Start reading response");
                 var readResult = await _pipeReader.ReadAsync(cancellationToken)
                    .ConfigureAwait(false);
-                Logger?.LogTrace("{@readResult}", readResult);
 
                 try
                 {
@@ -173,12 +172,13 @@ namespace FubarDev.FtpServer.Networking
             ReadOnlySequence<byte> buffer,
             CancellationToken cancellationToken)
         {
-            Logger?.LogTrace("Start sending");
+            Logger?.LogTrace("Start sending {count} bytes", buffer.Length);
             var position = buffer.Start;
 
             while (buffer.TryGet(ref position, out var memory))
             {
                 var streamBuffer = memory.ToArray();
+                Logger?.LogTrace("Write {count} bytes to stream", streamBuffer.Length);
                 await WriteToStreamAsync(streamBuffer, 0, streamBuffer.Length, cancellationToken)
                    .ConfigureAwait(false);
             }

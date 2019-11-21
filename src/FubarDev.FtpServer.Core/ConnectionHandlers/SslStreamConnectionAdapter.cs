@@ -26,6 +26,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         private readonly ISslStreamWrapperFactory _sslStreamWrapperFactory;
         private readonly X509Certificate2 _certificate;
         private readonly CancellationToken _connectionClosed;
+        private readonly ILogger<SslStreamConnectionAdapter>? _logger;
         private SslCommunicationInfo? _info;
 
         public SslStreamConnectionAdapter(
@@ -33,13 +34,15 @@ namespace FubarDev.FtpServer.ConnectionHandlers
             IDuplexPipe connectionPipe,
             ISslStreamWrapperFactory sslStreamWrapperFactory,
             X509Certificate2 certificate,
-            CancellationToken connectionClosed)
+            CancellationToken connectionClosed,
+            ILogger<SslStreamConnectionAdapter>? logger = null)
         {
             _socketPipe = socketPipe;
             _connectionPipe = connectionPipe;
             _sslStreamWrapperFactory = sslStreamWrapperFactory;
             _certificate = certificate;
             _connectionClosed = connectionClosed;
+            _logger = logger;
         }
 
         /// <inheritdoc />
