@@ -155,20 +155,5 @@ namespace FubarDev.FtpServer
                 _lifetimeFeature.Abort();
             }
         }
-
-        private class DuplexPipe : IDuplexPipe
-        {
-            public DuplexPipe(PipeReader input, PipeWriter output)
-            {
-                Input = input;
-                Output = output;
-            }
-
-            /// <inheritdoc />
-            public PipeReader Input { get; }
-
-            /// <inheritdoc />
-            public PipeWriter Output { get; }
-        }
     }
 }

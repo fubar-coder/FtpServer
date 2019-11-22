@@ -21,6 +21,7 @@ using FubarDev.FtpServer.ConnectionHandlers;
 using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.FileSystem;
 using FubarDev.FtpServer.Localization;
+using FubarDev.FtpServer.Networking;
 using FubarDev.FtpServer.ServerCommands;
 using FubarDev.FtpServer.Statistics;
 
@@ -423,21 +424,6 @@ namespace FubarDev.FtpServer
             {
                 _feature.Remove(_collector);
             }
-        }
-
-        private class DuplexPipe : IDuplexPipe
-        {
-            public DuplexPipe(PipeReader input, PipeWriter output)
-            {
-                Input = input;
-                Output = output;
-            }
-
-            /// <inheritdoc />
-            public PipeReader Input { get; }
-
-            /// <inheritdoc />
-            public PipeWriter Output { get; }
         }
     }
 }
