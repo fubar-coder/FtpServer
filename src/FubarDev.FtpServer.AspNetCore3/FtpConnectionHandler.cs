@@ -28,8 +28,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using Nerdbank.Streams;
-
 namespace FubarDev.FtpServer
 {
     internal class FtpConnectionHandler : ConnectionHandler
