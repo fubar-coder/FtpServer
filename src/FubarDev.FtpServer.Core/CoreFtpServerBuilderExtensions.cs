@@ -22,6 +22,12 @@ namespace FubarDev.FtpServer
     /// </summary>
     public static class CoreFtpServerBuilderExtensions
     {
+        /// <summary>
+        /// Use implicit TLS.
+        /// </summary>
+        /// <param name="builder">The FTP server builder.</param>
+        /// <param name="certificate">The certificate to use.</param>
+        /// <returns>The modified FTP server builder.</returns>
         public static IFtpServerBuilder UseImplicitTls(this IFtpServerBuilder builder, X509Certificate certificate)
         {
             builder.Services
