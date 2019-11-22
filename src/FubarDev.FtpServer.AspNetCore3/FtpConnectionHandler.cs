@@ -20,12 +20,15 @@ using FubarDev.FtpServer.ConnectionChecks;
 using FubarDev.FtpServer.DataConnection;
 using FubarDev.FtpServer.Features;
 using FubarDev.FtpServer.Localization;
+using FubarDev.FtpServer.Networking;
 using FubarDev.FtpServer.ServerCommands;
 
 using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
+using Nerdbank.Streams;
 
 namespace FubarDev.FtpServer
 {
@@ -42,7 +45,8 @@ namespace FubarDev.FtpServer
         private readonly ActiveDataConnectionFeatureFactory _activeDataConnectionFeatureFactory;
         private readonly IFtpServerMessages _ftpServerMessages;
         private readonly FtpServerStatisticsCollector _statisticsCollector;
-        private readonly FtpConnectionInitializer _ftpConnectionInitializer;
+        private readonly List<IFtpControlStreamAdapter> _controlStreamAdapters;
+        private readonly List<IFtpConnectionConfigurator> _configurators;
         private readonly ILogger<FtpConnectionHandler>? _logger;
         private readonly PortCommandOptions _portOptions;
         private readonly FtpConnectionOptions _options;
@@ -63,7 +67,8 @@ namespace FubarDev.FtpServer
             ActiveDataConnectionFeatureFactory activeDataConnectionFeatureFactory,
             IFtpServerMessages ftpServerMessages,
             FtpServerStatisticsCollector statisticsCollector,
-            FtpConnectionInitializer ftpConnectionInitializer,
+            IEnumerable<IFtpConnectionConfigurator> configurators,
+            IEnumerable<IFtpControlStreamAdapter> controlStreamAdapters,
             ILogger<FtpConnectionHandler>? logger = null)
         {
             _maxActiveConnections = serverOptions.Value.MaxActiveConnections;
@@ -76,7 +81,8 @@ namespace FubarDev.FtpServer
             _activeDataConnectionFeatureFactory = activeDataConnectionFeatureFactory;
             _ftpServerMessages = ftpServerMessages;
             _statisticsCollector = statisticsCollector;
-            _ftpConnectionInitializer = ftpConnectionInitializer;
+            _controlStreamAdapters = controlStreamAdapters.ToList();
+            _configurators = configurators.ToList();
             _logger = logger;
             _portOptions = portOptions.Value;
             _options = options.Value;
@@ -85,6 +91,24 @@ namespace FubarDev.FtpServer
         /// <inheritdoc />
         public override async Task OnConnectedAsync(ConnectionContext connection)
         {
+            var transport = connection.Transport;
+
+            // Support for implicit TLS
+            if (_controlStreamAdapters.Count != 0)
+            {
+                Stream stream = new PipeWrapperStream(transport);
+                foreach (var controlStreamAdapter in _controlStreamAdapters)
+                {
+                    stream = await controlStreamAdapter
+                       .WrapAsync(stream, connection.ConnectionClosed)
+                       .ConfigureAwait(false);
+                }
+
+                transport = new DuplexPipe(
+                    PipeReader.Create(stream),
+                    PipeWriter.Create(stream));
+            }
+
             var serverCommandChannel = Channel.CreateBounded<IServerCommand>(new BoundedChannelOptions(5));
             var ftpCommandChannel = Channel.CreateBounded<FtpCommand>(5);
 
@@ -97,7 +121,7 @@ namespace FubarDev.FtpServer
                 _catalogLoader,
                 defaultEncoding,
                 serverCommandChannel.Writer,
-                connection.Transport,
+                transport,
                 _sslStreamWrapperFactory,
                 applicationInputPipe,
                 applicationOutputPipe,
@@ -129,23 +153,17 @@ namespace FubarDev.FtpServer
             var checks = scope.ServiceProvider.GetRequiredService<IEnumerable<IFtpConnectionCheck>>().ToList();
             context.SetChecks(checks);
 
-            // Ensure that the decoration of IFtpConnectionInitializer comes into effect.
-            // ReSharper disable once UnusedVariable
-            var initializer = scope.ServiceProvider.GetRequiredService<IFtpConnectionInitializer>();
-
-            // Call the initializers
-            var args = new ConnectionEventArgs(context);
-            _ftpConnectionInitializer.OnConfigureConnection(this, args);
-            foreach (var asyncInitFunction in args.AsyncInitFunctions)
-            {
-                await asyncInitFunction(context, context.ConnectionClosed).ConfigureAwait(false);
-            }
-
             // Set the default FTP data connection feature
             var dataConnectionFeature = await _activeDataConnectionFeatureFactory
                .CreateFeatureAsync(null, remoteEndPoint, dataPort)
                .ConfigureAwait(false);
             context.Features.Set(dataConnectionFeature);
+
+            // Call the initializers
+            foreach (var configurator in _configurators)
+            {
+                await configurator.Configure(context, CancellationToken.None).ConfigureAwait(false);
+            }
 
             // Connection information
             _logger?.LogInformation("Connected from {remoteIp}", remoteEndPoint);
@@ -394,7 +412,8 @@ namespace FubarDev.FtpServer
                     }
 
                     var tasks = new List<Task>() { readTask };
-                    var backgroundTaskLifetimeService = connectionContext.Features.Get<IBackgroundTaskLifetimeFeature?>();
+                    var backgroundTaskLifetimeService =
+                        connectionContext.Features.Get<IBackgroundTaskLifetimeFeature?>();
                     if (backgroundTaskLifetimeService != null)
                     {
                         tasks.Add(backgroundTaskLifetimeService.Task);

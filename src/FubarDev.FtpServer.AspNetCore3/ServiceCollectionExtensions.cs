@@ -50,8 +50,6 @@ namespace Microsoft.Extensions.DependencyInjection
 #pragma warning restore 618
             services.AddSingleton<IFtpConnectionContextAccessor, FtpConnectionContextAccessor>();
             services.AddSingleton<FtpServerStatisticsCollector>();
-            services.AddSingleton<FtpConnectionInitializer>();
-            services.AddSingleton<IFtpConnectionInitializer>(sp => sp.GetRequiredService<FtpConnectionInitializer>());
 
             // Statistics are always transient to get the current values.
             services.AddTransient(sp => sp.GetRequiredService<FtpServerStatisticsCollector>().GetStatistics());

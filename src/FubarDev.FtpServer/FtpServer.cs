@@ -34,6 +34,7 @@ namespace FubarDev.FtpServer
     public sealed class FtpServer : IFtpServer, IDisposable
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly List<IFtpConnectionConfigurator> _configurators;
         private readonly FtpServerStatisticsCollector _statisticsCollector;
         private readonly ConcurrentDictionary<FtpConnection, FtpConnectionInfo> _connections = new ConcurrentDictionary<FtpConnection, FtpConnectionInfo>();
         private readonly FtpServerListenerService _serverListener;
@@ -49,17 +50,20 @@ namespace FubarDev.FtpServer
         /// </summary>
         /// <param name="serverOptions">The server options.</param>
         /// <param name="serviceProvider">The service provider used to query services.</param>
+        /// <param name="configurators">Configurators for FTP connections.</param>
         /// <param name="loggerFactory">The logger factory.</param>
         /// <param name="connectionListenerFactory">The connection listener factory.</param>
         /// <param name="logger">The FTP server logger.</param>
         public FtpServer(
             IOptions<FtpServerOptions> serverOptions,
             IServiceProvider serviceProvider,
+            IEnumerable<IFtpConnectionConfigurator> configurators,
             ILoggerFactory? loggerFactory,
             IConnectionListenerFactory? connectionListenerFactory = null,
             ILogger<FtpServer>? logger = null)
         {
             _serviceProvider = serviceProvider;
+            _configurators = configurators.ToList();
             _statisticsCollector = serviceProvider.GetRequiredService<FtpServerStatisticsCollector>();
             _log = logger;
             ServerAddress = serverOptions.Value.ServerAddress;
@@ -306,6 +310,7 @@ namespace FubarDev.FtpServer
 
         private async Task AddClientAsync(ConnectionContext client)
         {
+            var cancellationToken = CancellationToken.None;
             var scope = _serviceProvider.CreateScope();
             try
             {
@@ -338,17 +343,18 @@ namespace FubarDev.FtpServer
                     return;
                 }
 
-                // Ensure that the decoration of IFtpConnectionInitializer comes into effect.
-                // ReSharper disable once UnusedVariable
-                var initializer = scope.ServiceProvider.GetRequiredService<IFtpConnectionInitializer>();
-
                 // Connection configuration by host
                 var connectionContext = connection.Context;
                 var asyncInitFunctions = OnConfigureConnection(connectionContext);
                 foreach (var asyncInitFunction in asyncInitFunctions)
                 {
-                    await asyncInitFunction(connectionContext, CancellationToken.None)
+                    await asyncInitFunction(connectionContext, cancellationToken)
                        .ConfigureAwait(false);
+                }
+
+                foreach (var configurator in _configurators)
+                {
+                    await configurator.Configure(connectionContext, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Send initial message
@@ -361,11 +367,11 @@ namespace FubarDev.FtpServer
                 {
                     // Send response
                     var response = new FtpResponse(421, "Too many users, server is full.");
-                    await serverCommandWriter.WriteAsync(new SendResponseServerCommand(response))
+                    await serverCommandWriter.WriteAsync(new SendResponseServerCommand(response), cancellationToken)
                        .ConfigureAwait(false);
 
                     // Send close
-                    await serverCommandWriter.WriteAsync(new CloseConnectionServerCommand())
+                    await serverCommandWriter.WriteAsync(new CloseConnectionServerCommand(), cancellationToken)
                        .ConfigureAwait(false);
                 }
                 else

@@ -1,4 +1,4 @@
-// <copyright file="SimplePipeStream.cs" company="Fubar Development Junker">
+// <copyright file="PipeWrapperStream.cs" company="Fubar Development Junker">
 // Copyright (c) Fubar Development Junker. All rights reserved.
 // </copyright>
 
@@ -13,17 +13,26 @@ namespace FubarDev.FtpServer.Networking
     /// <summary>
     /// A stream that uses a pipe.
     /// </summary>
-    internal class SimplePipeStream : Stream
+    internal class PipeWrapperStream : Stream
     {
         private readonly Stream _input;
         private readonly Stream _output;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SimplePipeStream"/> class.
+        /// Initializes a new instance of the <see cref="PipeWrapperStream"/> class.
+        /// </summary>
+        /// <param name="duplexPipe">The duplex pipe to create the stream for.</param>
+        public PipeWrapperStream(IDuplexPipe duplexPipe)
+            : this(duplexPipe.Input, duplexPipe.Output)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PipeWrapperStream"/> class.
         /// </summary>
         /// <param name="input">The pipe reader to be used to read from.</param>
         /// <param name="output">The pipe writer to be used to write to.</param>
-        public SimplePipeStream(
+        public PipeWrapperStream(
             PipeReader input,
             PipeWriter output)
         {

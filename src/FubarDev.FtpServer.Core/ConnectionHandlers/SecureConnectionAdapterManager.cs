@@ -145,7 +145,7 @@ namespace FubarDev.FtpServer.ConnectionHandlers
         }
 
         /// <inheritdoc />
-        public Task EnableSslStreamAsync(X509Certificate2 certificate, CancellationToken cancellationToken)
+        public Task EnableSslStreamAsync(X509Certificate certificate, CancellationToken cancellationToken)
         {
             return ActivateAsync(
                 new SslStreamConnectionAdapter(
